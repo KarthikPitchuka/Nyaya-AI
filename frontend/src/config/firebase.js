@@ -18,8 +18,8 @@ const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// Connect to Firebase emulator in development
-if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && !auth.emulatorConfig) {
+// Connect to Firebase emulator in development if enabled via env
+if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && !auth.emulatorConfig && import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true') {
     try {
         connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
         connectFirestoreEmulator(db, '127.0.0.1', 8080);
