@@ -44,56 +44,44 @@ export const LocationProvider = ({ children }) => {
 
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
-                (position) => {
+                async (position) => {
                     const { latitude, longitude } = position.coords;
                     setCoords({ latitude, longitude });
 
-                    // Use Nominatim for reverse geocoding
-                    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`;
+                    try {
+                        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`;
+                        const res = await fetch(url);
+                        const data = await res.json();
 
-                    fetch(url)
-                        .then(res => res.json())
-                        .then(async (data) => {
-                            if (data && data.address) {
-                                const addr = data.address;
-                                const parts = [
-                                    addr.village || addr.hamlet || addr.town || addr.suburb || '',
-                                    addr.city || addr.county || addr.state_district || '',
-                                    addr.state || '',
-                                    addr.postcode || ''
-                                ].filter(Boolean);
+                        if (data && data.address) {
+                            const addr = data.address;
+                            const parts = [
+                                addr.building || addr.amenity || addr.road || addr.suburb || addr.neighbourhood || addr.village || addr.hamlet || addr.town || '',
+                                addr.city || addr.county || addr.state_district || '',
+                                addr.state || '',
+                                addr.postcode || ''
+                            ].filter(Boolean);
 
-                                const locationString = [...new Set(parts)].join(', ');
-                                setLocationStr(locationString);
-                                localStorage.setItem('nyaya_user_location', locationString);
-                                setLocationError('');
-                                setShowBanner(false);
-                            } else {
-                                const success = await tryBackendIpLocation();
-                                if (!success) {
-                                    const fallback = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-                                    setLocationStr(fallback);
-                                    localStorage.setItem('nyaya_user_location', fallback);
-                                    setShowBanner(false);
-                                }
-                            }
-                        })
-                        .catch(async (err) => {
-                            console.error("Reverse geocoding error, trying IP location fallback:", err);
-                            const success = await tryBackendIpLocation();
-                            if (!success) {
-                                const fallback = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-                                setLocationStr(fallback);
-                                localStorage.setItem('nyaya_user_location', fallback);
-                                setShowBanner(false);
-                            }
-                        })
-                        .finally(() => {
+                            const locationString = [...new Set(parts)].join(', ');
+                            setLocationStr(locationString);
+                            localStorage.setItem('nyaya_user_location', locationString);
+                            setLocationError('');
+                            setShowBanner(false);
                             setIsLoadingLocation(false);
-                        });
+                            return;
+                        }
+                    } catch (err) {
+                        console.error("Live GPS reverse geocoding failed:", err);
+                    }
+
+                    const fallback = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+                    setLocationStr(fallback);
+                    localStorage.setItem('nyaya_user_location', fallback);
+                    setShowBanner(false);
+                    setIsLoadingLocation(false);
                 },
                 async (error) => {
-                    console.log("Browser Geolocation failed/denied. Trying IP Geolocation fallback...");
+                    console.log("Live GPS failed or denied, trying IP location fallback...", error.message);
                     const success = await tryBackendIpLocation();
                     setIsLoadingLocation(false);
 
@@ -101,7 +89,7 @@ export const LocationProvider = ({ children }) => {
                         let msg = "Location Error";
                         switch (error.code) {
                             case error.PERMISSION_DENIED:
-                                msg = "Location access denied. Please click 'Enter Manually' to set your location.";
+                                msg = "Location access denied. Click 'Enter Manually' to select your location.";
                                 break;
                             case error.POSITION_UNAVAILABLE:
                                 msg = "Location information is unavailable.";
@@ -114,11 +102,10 @@ export const LocationProvider = ({ children }) => {
                                 break;
                         }
                         setLocationError(msg);
-                        console.error("Geolocation error:", msg);
                         setShowBanner(true);
                     }
                 },
-                { enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 }
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
         } else {
             const success = await tryBackendIpLocation();
