@@ -164,11 +164,9 @@ export const LocationProvider = ({ children }) => {
         const savedLocation = localStorage.getItem('nyaya_user_location');
         if (savedLocation) {
             setLocationStr(savedLocation);
-            // Refresh in background to see if GPS is now available/better
-            // fetchLocation(false); 
-        } else {
-            fetchLocation(false);
         }
+        // Always trigger fresh detection on launch so all browsers show the real live location
+        fetchLocation(false);
     }, []);
 
     return (
@@ -182,7 +180,10 @@ export const LocationProvider = ({ children }) => {
             searchLocation,
             searchResults,
             selectLocation,
-            refreshLocation: () => fetchLocation(true)
+            refreshLocation: () => {
+                localStorage.removeItem('nyaya_user_location');
+                fetchLocation(true);
+            }
         }}>
             {/* 📍 Sticky Location Permission Banner */}
             {showBanner && !isManualMode && (
