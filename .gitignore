@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment variables & secrets
+.env
+**/.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+**/*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Uploads & temporary media
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Build outputs
+dist/
+**/dist/
+build/
+
+# IDE / OS files
+.DS_Store
+.vscode/
+.idea/
+*.swp

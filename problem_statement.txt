@@ -1,0 +1,110 @@
+================================================================================
+           NYAYA-AI LEGAL ASSISTANT PLATFORM: PROBLEM STATEMENT & DETAILS
+================================================================================
+
+1. PROBLEM STATEMENT
+--------------------
+Access to legal assistance in India is hindered by several systemic issues:
+- Complexity & Lack of Guidance: Citizens facing legal issues often do not know which
+  legal domains apply, what rights they have, what mistakes they might have made, or
+  which government department to contact.
+- Language and Literacy Barriers: Voice descriptions and transliterated languages 
+  (e.g., Romanized Hindi like "mujhe problem hai" or Romanized Telugu like "naa peru yusuf")
+  are not understood by standard legal search portals.
+- Lack of Emergency Assistance & Tracking: Filing immediate emergency reports for cybercrime
+  or tracking the resolution status is highly manual and lacks automation.
+- SMS API Expenses: Deploying production SMS OTP solutions for authentication adds high 
+  recurring costs during development and testing phases.
+
+Nyaya-AI is designed as an interactive, voice-enabled multi-lingual AI legal assistant
+that bridges these gaps by providing automated classification, localized legal advice,
+emergency tracking, and cost-free authentication.
+
+
+2. ARCHITECTURE & TECHNOLOGY STACK
+----------------------------------
+- Frontend: React.js (built with Vite), Tailwind CSS for styles, and Lucide React icons.
+- Backend: Node.js, Express.js web framework.
+- Database: MongoDB (with Mongoose ORM).
+- AI Engine: Google Gemini API (model 'gemini-2.0-flash' via @google/genai SDK) 
+  for text translation, audio transcription, and Indian legal case analysis.
+- Authentication: 
+  - Firebase Phone Auth Emulator (cost-free, local phone auth testing).
+  - Time-based One-Time Password (TOTP) utilizing speakeasy and qrcode.
+- Text-To-Speech: node-edge-tts (high-quality Microsoft Edge Neural Voices).
+- Geolocation: Google Geolocation API, IP-API, IPAPI.co, IPWhois.app, and 
+  OpenStreetMap (Nominatim) for reverse-geocoding.
+
+
+3. KEY FUNCTIONALITIES
+----------------------
+- Unified Authentication Portal: Allows citizens to log in via phone number (Firebase) 
+  or TOTP (Authenticator Apps) safely and without ongoing cost.
+- Case Analysis & Transliteration:
+  - Supports audio/text inputs.
+  - Automatically translates romanized Indian languages (transliterated Hindi/Telugu/Tamil).
+  - Classifies case type, complexity level, and legal domains.
+  - Generates legal advice, user rights, mistakes, next steps, and target departments in 
+    the native script of the user's detected language.
+- Emergency Report Tracking: Immediate tracing of cyber crime and reporting coordinates.
+- Text-To-Speech (TTS): Speaks out legal resolutions to users using native voices 
+  (e.g., MohanNeural for Telugu, MadhurNeural for Hindi, ValluvarNeural for Tamil).
+- Cyber Portal Dashboard: An interface for cyber officials to track, log, and resolve
+  emergency reports.
+
+
+4. BACKEND API ENDPOINTS
+------------------------
+- /api/auth
+  - POST /send-otp       : Generates and prints 6-digit OTP to console for local simulation.
+  - POST /verify-otp     : Verifies the simulated OTP.
+  - POST /totp/setup     : Generates TOTP secret key and QR code data URL.
+  - POST /totp/verify    : Verifies TOTP code and activates MFA.
+- /api/cyber/auth
+  - POST /register       : Registers administrative officials/agents.
+  - POST /login          : Authenticates agents and returns a JWT token.
+- /api/cases
+  - POST /analyze        : Uploads evidence and performs Gemini legal analysis.
+  - POST /transcribe     : Transcribes voice files to text using Gemini.
+- /api/reports
+  - POST /               : Submits regular cases to supervisor.
+  - POST /emergency      : Traces emergency numbers/coordinates and submits urgent reports.
+  - GET /emergency       : Retrieves emergency reports for the Cyber Portal.
+  - PUT /emergency/:id/status : Updates emergency resolution state.
+  - GET /case/:caseId    : Checks report tracking status.
+  - POST /:trackingId/escalate : Simulates automatic court escalation after a 14-day delay.
+- /api/geolocation
+  - POST /               : Traces location using Google Geolocation or multiple fallback IP providers.
+- /api/tts
+  - POST /               : Generates audio speech buffer for any Indian script using edge neural voices.
+
+
+5. DATABASE MODELS (MONGOOSE SCHEMAS)
+--------------------------------------
+- User (CyberUser.js)
+  - Fields: email, password, name, role, totpEnabled, totpSecret, createdAt.
+- Case (Case.js)
+  - Fields: userPhone, userPrompt, location, language, translatedText, caseType, caseTitle, 
+    legalDomain, complexityScore, complexityLevel, recommendedSolution, nextSteps, userRights, 
+    userMistakes, targetDepartment, targetSupervisor, departmentUrl, evidenceUrls, createdAt.
+- Report (Report.js)
+  - Fields: caseId, department, supervisor, description, evidenceUrls, status, trackingId, 
+    createdAt, escalatedAt.
+- EmergencyReport (EmergencyReport.js)
+  - Fields: userPhone, attackerPhone, userLocation, status, department, audioUrl, actionTaken, 
+    trackingId, createdAt.
+
+
+6. FRONTEND PAGES & COMPONENTS
+------------------------------
+- src/App.jsx: Orchestrates routes, hooks navigation, and displays sticky headers.
+- src/pages/LoginPage.jsx: Unified phone login interface.
+- src/pages/UnifiedLoginPage.jsx: Handles choosing between SMS emulator or TOTP app.
+- src/pages/HomePage.jsx: Landing panel for filing cases, viewing reports, and running TTS.
+- src/pages/cyber/CyberLogin.jsx: Secure credential login for admins.
+- src/pages/cyber/CyberDashboard.jsx: Command center for agents resolving cyber emergencies.
+- src/components/EmergencyReportModal.jsx: Record audio and report ongoing emergency.
+- src/components/TOTPSetup.jsx / TOTPLogin.jsx: Setup screens for MFA.
+- src/components/TTSButton.jsx: Controls audio playback of legal analysis.
+- src/components/MultilingualInput.jsx: Supports audio record and voice-to-text input.
+================================================================================

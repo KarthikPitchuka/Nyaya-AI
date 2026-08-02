@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nyaya-AI | Legal Assistant</title>
+</head>
+
+<body>
+  <!-- Google Translate Element (with fallback) -->
+  <div id="translate-container">
+    <div id="google_translate_element"></div>
+    <select id="translate-fallback" aria-label="Translate page" style="display:none">
+      <option value="">Language</option>
+      <option value="hi">हिन्दी</option>
+      <option value="te">తెలుగు</option>
+      <option value="ta">தமிழ்</option>
+      <option value="kn">ಕನ್ನಡ</option>
+      <option value="ml">മലയാളം</option>
+      <option value="mr">मराठी</option>
+      <option value="bn">বাংলা</option>
+      <option value="gu">ગુજરાતી</option>
+      <option value="pa">ਪੰਜਾਬੀ</option>
+      <option value="or">ଓଡ଼ିଆ</option>
+      <option value="ur">اردو</option>
+      <option value="en">English</option>
+    </select>
+  </div>
+
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+
+  <!-- Google Translate Script -->
+  <script type="text/javascript">
+    function googleTranslateElementInit() {
+      new google.translate.TranslateElement({
+        pageLanguage: 'en',
+        includedLanguages: 'en,hi,te,ta,kn,ml,mr,bn,gu,pa,or,ur',
+        layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+        autoDisplay: false
+      }, 'google_translate_element');
+    }
+  </script>
+  <script type="text/javascript"
+    src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+
+  <script>
+    // If Google Translate is blocked (e.g., by Brave shields), show a safe fallback.
+    (function () {
+      function showFallback() {
+        var sel = document.getElementById('translate-fallback');
+        if (sel) sel.style.display = 'inline-block';
+      }
+
+      // If google object is available, ensure the container gets styled.
+      if (!window.google || !window.google.translate) {
+        // Wait briefly for the script to load; if still unavailable, show fallback
+        setTimeout(function () {
+          if (!window.google || !window.google.translate) showFallback();
+        }, 1500);
+      }
+
+      // Handle fallback selection by redirecting to Google Translate web proxy for the page
+      document.addEventListener('change', function (e) {
+        var t = e.target;
+        if (t && t.id === 'translate-fallback' && t.value) {
+          var lang = t.value;
+          var url = 'https://translate.google.com/translate?sl=auto&tl=' + encodeURIComponent(lang) + '&u=' + encodeURIComponent(window.location.href);
+          window.open(url, '_blank');
+          // reset select back to placeholder
+          t.selectedIndex = 0;
+        }
+      });
+    })();
+  </script>
+
+</body>
+
+</html>
