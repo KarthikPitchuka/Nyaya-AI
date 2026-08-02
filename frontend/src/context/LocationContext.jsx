@@ -15,10 +15,32 @@ export const LocationProvider = ({ children }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
 
-    const fetchLocation = (triggeredByUser = false) => {
+    const fetchLocation = async (triggeredByUser = false) => {
         setIsLoadingLocation(true);
         setLocationError('');
         setIsManualMode(false);
+
+        const tryBackendIpLocation = async () => {
+            try {
+                const res = await fetch('http://localhost:5000/api/geolocation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (data.success && data.best && data.best.location) {
+                    setLocationStr(data.best.location);
+                    localStorage.setItem('nyaya_user_location', data.best.location);
+                    if (data.best.lat && data.best.lng) {
+                        setCoords({ latitude: data.best.lat, longitude: data.best.lng });
+                    }
+                    setShowBanner(false);
+                    return true;
+                }
+            } catch (err) {
+                console.error("Backend IP Geolocation fallback failed:", err);
+            }
+            return false;
+        };
 
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
@@ -31,7 +53,7 @@ export const LocationProvider = ({ children }) => {
 
                     fetch(url)
                         .then(res => res.json())
-                        .then(data => {
+                        .then(async (data) => {
                             if (data && data.address) {
                                 const addr = data.address;
                                 const parts = [
@@ -47,50 +69,64 @@ export const LocationProvider = ({ children }) => {
                                 setLocationError('');
                                 setShowBanner(false);
                             } else {
+                                const success = await tryBackendIpLocation();
+                                if (!success) {
+                                    const fallback = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+                                    setLocationStr(fallback);
+                                    localStorage.setItem('nyaya_user_location', fallback);
+                                    setShowBanner(false);
+                                }
+                            }
+                        })
+                        .catch(async (err) => {
+                            console.error("Reverse geocoding error, trying IP location fallback:", err);
+                            const success = await tryBackendIpLocation();
+                            if (!success) {
                                 const fallback = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
                                 setLocationStr(fallback);
                                 localStorage.setItem('nyaya_user_location', fallback);
                                 setShowBanner(false);
                             }
                         })
-                        .catch((err) => {
-                            console.error("Reverse geocoding error:", err);
-                            const fallback = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-                            setLocationStr(fallback);
-                            localStorage.setItem('nyaya_user_location', fallback);
-                            setShowBanner(false);
-                        })
                         .finally(() => {
                             setIsLoadingLocation(false);
                         });
                 },
-                (error) => {
+                async (error) => {
+                    console.log("Browser Geolocation failed/denied. Trying IP Geolocation fallback...");
+                    const success = await tryBackendIpLocation();
                     setIsLoadingLocation(false);
-                    let msg = "Location Error";
-                    switch (error.code) {
-                        case error.PERMISSION_DENIED:
-                            msg = "Location access denied. Please click 'Enable Location' and allow browser access.";
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            msg = "Location information is unavailable.";
-                            break;
-                        case error.TIMEOUT:
-                            msg = "Location request timed out.";
-                            break;
-                        default:
-                            msg = "An unknown error occurred.";
-                            break;
+
+                    if (!success) {
+                        let msg = "Location Error";
+                        switch (error.code) {
+                            case error.PERMISSION_DENIED:
+                                msg = "Location access denied. Please click 'Enter Manually' to set your location.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                msg = "Location information is unavailable.";
+                                break;
+                            case error.TIMEOUT:
+                                msg = "Location request timed out.";
+                                break;
+                            default:
+                                msg = "An unknown error occurred.";
+                                break;
+                        }
+                        setLocationError(msg);
+                        console.error("Geolocation error:", msg);
+                        setShowBanner(true);
                     }
-                    setLocationError(msg);
-                    console.error("Geolocation error:", msg);
-                    setShowBanner(true); // Keep banner visible if permission denied or error
                 },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                { enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 }
             );
         } else {
+            const success = await tryBackendIpLocation();
             setIsLoadingLocation(false);
-            setLocationError("Geolocation is not supported by your browser.");
-            setShowBanner(true);
+            if (!success) {
+                setLocationError("Geolocation is not supported by your browser.");
+                setShowBanner(true);
+            }
         }
     };
 
