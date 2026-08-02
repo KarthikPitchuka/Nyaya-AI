@@ -46,7 +46,12 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ success: false, message: 'Invalid credentials.' });
         }
 
-        const token = jwt.encode({ id: user._id, role: user.role }, JWT_SECRET);
+        // 30 days token expiration
+        const token = jwt.encode({ 
+            id: user._id, 
+            role: user.role,
+            exp: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) 
+        }, JWT_SECRET);
 
         res.status(200).json({
             success: true,
