@@ -1,0 +1,28 @@
+name: Update Browserslist DB
+
+on:
+  schedule:
+    # Runs at 00:00 UTC on the 1st of every month
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-browserslist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Update Browserslist DB & Create PR
+        uses: c2corg/browserslist-update-action@v2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          directory: frontend
+          branch: update-browserslist-db
+          commit_message: "chore: update caniuse-lite database"
+          title: "chore: update browserslist database"
+          body: "Automated PR created to update `caniuse-lite` via `npx update-browserslist-db@latest`."
