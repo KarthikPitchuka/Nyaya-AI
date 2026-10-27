@@ -23,6 +23,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           directory: frontend
           branch: update-browserslist-db
+          base_branch: main
           commit_message: "chore: update caniuse-lite database"
           title: "chore: update browserslist database"
           body: "Automated PR created to update `caniuse-lite` via `npx update-browserslist-db@latest`."
