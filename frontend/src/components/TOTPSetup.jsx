@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { API_BASE_URL } from '../config/api';
 
 export default function TOTPSetup() {
   const [email, setEmail] = useState('');
@@ -10,7 +11,7 @@ export default function TOTPSetup() {
     setLoading(true);
     setMsg('');
     try {
-      const res = await fetch('/api/auth/totp/setup', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/totp/setup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
@@ -21,10 +22,12 @@ export default function TOTPSetup() {
       } else {
         setMsg(data.message || 'Failed');
       }
-    } catch (e) {
-      setMsg('Request failed');
+    } catch (error) {
+      console.error('TOTP setup failed:', error);
+      setMsg(error.message || 'Request failed');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

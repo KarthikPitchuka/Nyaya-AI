@@ -1,13 +1,11 @@
-import React from 'react';
-import { Volume2, VolumeX, Loader2, Pause, Play } from 'lucide-react';
+import { useId } from 'react';
+import { VolumeX, Loader2, Pause, Play } from 'lucide-react';
 import { useTTS } from '../context/TTSContext';
 
 const TTSButton = ({ text, targetId, className = "" }) => {
     const { isPlaying, isPaused, isLoading, activeId, play, pause, resume, stop } = useTTS();
-
-    // Create a unique ID for this button instance if one doesn't exist
-    // We use targetId if available, otherwise we'd need another unique prop
-    const buttonId = targetId || text?.slice(0, 20);
+    const generatedId = useId();
+    const buttonId = targetId || generatedId;
     const isThisActive = activeId === buttonId;
 
     const handleToggle = () => {

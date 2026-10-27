@@ -1,11 +1,11 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { lazy, Suspense } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 
 // Pages
-import HomePage from './pages/HomePage';
-import LoginPage from './pages/LoginPage';
-import CyberLogin from './pages/cyber/CyberLogin';
-import CyberDashboard from './pages/cyber/CyberDashboard';
+const HomePage = lazy(() => import('./pages/HomePage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const CyberLogin = lazy(() => import('./pages/cyber/CyberLogin'));
+const CyberDashboard = lazy(() => import('./pages/cyber/CyberDashboard'));
 
 // Components
 import EmergencyReportModal from './components/EmergencyReportModal';
@@ -30,7 +30,7 @@ const Navbar = () => {
               <span className="text-xs text-gray-400 font-mono hidden sm:inline">
                 📱 +91 {user.phone.slice(-10)}
               </span>
-              <a href="/" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">Home</a>
+              <Link to="/" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">Home</Link>
               <button
                 onClick={() => setShowEmergencyModal(true)}
                 className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg font-bold transition-colors border border-red-200"
@@ -49,12 +49,12 @@ const Navbar = () => {
               </button>
             </>
           ) : (
-            <a
-              href="/login"
+            <Link
+              to="/login"
               className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors shadow-sm"
             >
               Login
-            </a>
+            </Link>
           )}
         </nav>
       </div>
@@ -77,6 +77,11 @@ function AppContent() {
     <TTSProvider>
       <LocationProvider>
         <div className="min-h-screen bg-gray-50 font-sans text-gray-900 transition-colors duration-300">
+          <Suspense fallback={
+            <div className="flex min-h-[calc(100vh-140px)] items-center justify-center text-sm font-medium text-gray-500" role="status">
+              Loading Nyaya-AI...
+            </div>
+          }>
           <Routes>
             {/* Cyber Portal Routes (No main navbar) */}
             <Route path="/cyber/login" element={<CyberLogin />} />
@@ -106,6 +111,7 @@ function AppContent() {
               }
             />
           </Routes>
+          </Suspense>
           {/* Modal is rendered at root level to overlay everything */}
           <EmergencyReportModal
             isOpen={isEmergencyOpen}

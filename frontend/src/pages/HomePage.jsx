@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import MultilingualInput from '../components/MultilingualInput';
 import DecisionRouter from '../components/DecisionRouter';
 import MyEmergencyReports from '../components/MyEmergencyReports';

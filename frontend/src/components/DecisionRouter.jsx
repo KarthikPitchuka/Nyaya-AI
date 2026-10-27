@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { ShieldAlert, Users, Scale, AlertTriangle, FileText, ArrowRight, Activity, CheckCircle2, Clock, Send, Loader2, ExternalLink, MapPin, Phone } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { ShieldAlert, Users, Scale, AlertTriangle, FileText, ArrowRight, Activity, CheckCircle2, Clock, Send, Loader2, ExternalLink, MapPin, Navigation } from 'lucide-react';
 import axios from 'axios';
 import TTSButton from './TTSButton';
+import { API_BASE_URL } from '../config/api';
+import { useLocation } from '../context/LocationContext';
 
 const DecisionRouter = ({ analysis, caseId }) => {
+    const { locationStr, coords } = useLocation();
     const [reportStatus, setReportStatus] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
@@ -11,18 +14,10 @@ const DecisionRouter = ({ analysis, caseId }) => {
     const [reportDescription, setReportDescription] = useState('');
     const [reportFiles, setReportFiles] = useState([]);
 
-    useEffect(() => {
-        if (caseId) {
-            checkReportStatus();
-        }
-        if (analysis) {
-            setReportDescription(`Formal complaint regarding: ${analysis.case_title}\n\n[Add more details about the incident here...]`);
-        }
-    }, [caseId, analysis]);
-
-    const checkReportStatus = async () => {
+    const checkReportStatus = useCallback(async () => {
+        if (!caseId) return;
         try {
-            const response = await axios.get(`http://localhost:5000/api/reports/case/${caseId}`);
+            const response = await axios.get(`${API_BASE_URL}/api/reports/case/${caseId}`);
             if (response.data.success) {
                 setReportStatus(response.data.data);
             }
@@ -32,7 +27,14 @@ const DecisionRouter = ({ analysis, caseId }) => {
                 console.error("Error checking report status:", error);
             }
         }
-    };
+    }, [caseId]);
+
+    useEffect(() => {
+        checkReportStatus();
+        if (analysis) {
+            setReportDescription(`Formal complaint regarding: ${analysis.case_title}\n\n[Add more details about the incident here...]`);
+        }
+    }, [analysis, checkReportStatus]);
 
     const handleFileReport = async (e) => {
         e?.preventDefault();
@@ -48,7 +50,7 @@ const DecisionRouter = ({ analysis, caseId }) => {
                 formData.append('evidence', reportFiles[i]);
             }
 
-            const response = await axios.post('http://localhost:5000/api/reports', formData, {
+            const response = await axios.post(`${API_BASE_URL}/api/reports`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
@@ -78,7 +80,9 @@ const DecisionRouter = ({ analysis, caseId }) => {
         target_department,
         target_supervisor,
         department_url,
-        police_stations
+        police_stations,
+        legal_sources = [],
+        legal_source_notice
     } = analysis;
 
     const getStyleForComplexity = (level) => {
@@ -115,6 +119,24 @@ const DecisionRouter = ({ analysis, caseId }) => {
     };
 
     const style = getStyleForComplexity(complexity_level);
+    const getDirectionsUrl = (station) => {
+        const near = coords
+            ? `${coords.latitude},${coords.longitude}`
+            : locationStr;
+        const destination = near
+            ? `police station near ${near}`
+            : station.name;
+        const origin = coords
+            ? `${coords.latitude},${coords.longitude}`
+            : locationStr;
+        const params = new URLSearchParams({
+            api: '1',
+            destination,
+            travelmode: 'driving'
+        });
+        if (origin) params.set('origin', origin);
+        return `https://www.google.com/maps/dir/?${params.toString()}`;
+    };
 
     return (
         <div className="w-full max-w-4xl mx-auto mt-8 animate-fade-in-up">
@@ -156,6 +178,35 @@ const DecisionRouter = ({ analysis, caseId }) => {
                         </div>
                     </div>
                 </div>
+
+                {legal_sources.length > 0 && (
+                    <section className="border-b border-gray-100 bg-slate-50 px-6 py-5 sm:px-8" aria-labelledby="legal-sources-heading">
+                        <div className="flex items-start gap-3">
+                            <div className="mt-0.5 rounded-lg bg-indigo-100 p-2 text-indigo-700">
+                                <FileText size={18} aria-hidden="true" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <h4 id="legal-sources-heading" className="font-bold text-gray-900">Relevant Central Acts passages</h4>
+                                <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                                    {legal_source_notice || 'These passages are references for review, not a determination that each provision applies or is currently in force.'}
+                                </p>
+                                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                                    {legal_sources.map((source, index) => (
+                                        <li key={`${source.fileName}-${source.section}-${index}`} className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+                                            <p className="text-sm font-semibold text-indigo-800">
+                                                {source.actTitle}{source.section ? `, ${source.section}` : ''}
+                                            </p>
+                                            {source.heading && <p className="mt-0.5 text-xs text-gray-600">{source.heading}</p>}
+                                            <p className="mt-1 text-[11px] text-gray-400">
+                                                {source.actId}{source.context ? ` · ${source.context}` : ''}
+                                            </p>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+                )}
 
                 {/* Content Section */}
                 <div className="p-8 bg-gray-50/50">
@@ -371,9 +422,11 @@ const DecisionRouter = ({ analysis, caseId }) => {
                             <div>
                                 <h4 className="text-xl font-bold flex items-center gap-2 text-gray-900">
                                     <MapPin className="text-blue-500" size={24} />
-                                    Target Police Stations
+                                    Nearest Police Station
                                 </h4>
-                                <p className="text-gray-500 mt-1 text-sm">Nearest stations mapped to your case type and location</p>
+                                <p className="text-gray-500 mt-1 text-sm">
+                                    Open the nearest police station search in Google Maps.
+                                </p>
                             </div>
                         </div>
 
@@ -391,15 +444,18 @@ const DecisionRouter = ({ analysis, caseId }) => {
                                     </div>
                                     <p className="text-sm font-medium text-blue-600 mb-5">{station.specialty}</p>
 
-                                    <div className="space-y-3 border-t border-gray-100 pt-4">
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="text-gray-500 flex items-center gap-1.5"><MapPin size={14} /> Distance</span>
-                                            <span className="text-gray-900 font-bold">{station.distance}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="text-gray-500 flex items-center gap-1.5"><Phone size={14} /> Emergency</span>
-                                            <span className="text-gray-900 font-bold bg-gray-50 px-2 py-0.5 rounded">{station.contact}</span>
-                                        </div>
+                                    <div className="border-t border-gray-100 pt-4">
+                                        <a
+                                            href={getDirectionsUrl(station)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                                            aria-label={`Get directions to ${station.name} in Google Maps`}
+                                        >
+                                            <Navigation size={16} />
+                                            Find nearest on Maps
+                                            <ExternalLink size={14} aria-hidden="true" />
+                                        </a>
                                     </div>
                                 </div>
                             ))}

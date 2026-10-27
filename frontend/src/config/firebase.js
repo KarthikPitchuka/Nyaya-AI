@@ -1,5 +1,4 @@
 import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
 import { getFirestore, addDoc, collection, connectFirestoreEmulator } from "firebase/firestore";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
 
@@ -14,17 +13,16 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
 const db = getFirestore(app);
 const auth = getAuth(app);
 
 // Connect to Firebase emulator in development if enabled via env
-if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && !auth.emulatorConfig && import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true') {
+if (import.meta.env.DEV && typeof window !== 'undefined' && !auth.emulatorConfig && import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true') {
     try {
         connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
         connectFirestoreEmulator(db, '127.0.0.1', 8080);
-    } catch (e) {
-        // Emulator may not be available
+    } catch (error) {
+        console.warn('Firebase emulator connection failed:', error);
     }
 }
 

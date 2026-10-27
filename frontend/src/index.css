@@ -1,69 +1,102 @@
 @import "tailwindcss";
 
-/* Hide Google Translate top bar that shifts layout */
-body {
-  top: 0 !important;
+:root {
+  color-scheme: only light;
 }
 
-.skiptranslate iframe,
-.goog-te-banner-frame {
-  display: none !important;
+/* Keep language controls in a dedicated row instead of floating over the app. */
+#translate-container {
+  position: relative;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 48px;
+  padding: 6px clamp(16px, 4vw, 48px);
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
 }
 
-/* Hide translate tooltip box */
-#goog-gt-tt {
-  display: none !important;
+#google_translate_element {
+  min-width: 0;
 }
 
-/* Customize translator dropdown slightly */
-.goog-te-combo {
-  padding: 4px;
-  border-radius: 6px;
-  border: 1px solid #e2e8f0;
+.goog-te-gadget {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
   color: #475569;
-  font-size: 14px;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.goog-te-gadget-simple {
+  display: inline-flex !important;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid #dbe2ea !important;
+  border-radius: 10px;
+  background: #f8fafc !important;
+  box-sizing: border-box;
+  white-space: nowrap !important;
+}
+
+.goog-te-gadget-simple > span,
+.goog-te-gadget-simple a {
+  display: inline-flex !important;
+  align-items: center;
+  white-space: nowrap !important;
+  color: #334155 !important;
+  text-decoration: none;
+}
+
+.goog-te-gadget-simple a {
+  gap: 6px;
+}
+
+.goog-te-gadget-simple .goog-te-gadget-icon {
+  width: 16px;
+  height: 16px;
+  margin: 0 8px 0 0;
+  background-size: 16px auto;
+  background-position: center !important;
+}
+
+.goog-te-combo {
+  max-width: min(220px, 52vw);
+  min-height: 36px;
+  margin: 0;
+  padding: 0 34px 0 12px;
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  background-color: #f8fafc;
+  color: #334155;
+  font: inherit;
+  cursor: pointer;
   outline: none;
 }
 
-/* Container in top-right for translate widget / fallback */
-#translate-container {
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  z-index: 9999;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: transparent;
+.goog-te-combo:focus,
+#translate-fallback:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgb(99 102 241 / 15%);
 }
 
-/* Style fallback select to match app look */
 #translate-fallback {
-  padding: 6px 10px;
-  border-radius: 9999px;
-  border: 1px solid rgba(15,23,42,0.06);
-  background: #fff;
-  color: #0f172a;
-  font-size: 13px;
-  box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+  min-height: 36px;
+  max-width: min(220px, 52vw);
+  padding: 0 34px 0 12px;
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #334155;
+  font: inherit;
+  cursor: pointer;
 }
 
-/* Google Translate default elements tweaks */
-.goog-te-gadget {
-  font-size: 0; /* collapse default text spacing */
-}
-.goog-te-combo {
-  font-size: 13px;
-  padding: 6px 8px;
-  border-radius: 9999px;
-}
-
-/* Remove intrusive banner or tooltip that some browsers still inject */
 .skiptranslate iframe,
-.goog-te-banner-frame {
-  display: none !important;
-}
-
+.goog-te-banner-frame,
 #goog-gt-tt {
   display: none !important;
 }

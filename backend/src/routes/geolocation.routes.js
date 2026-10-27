@@ -16,37 +16,38 @@ router.post('/', async (req, res) => {
         const results = [];
 
         // Strategy 1: Google Geolocation API (WiFi/cell tower based)
-        try {
-            const googleRes = await axios.post(
-                `https://www.googleapis.com/geolocation/v1/geolocate?key=${process.env.GEMINI_API_KEY}`,
-                { considerIp: true },
-                { timeout: 5000 }
-            );
-            if (googleRes.data?.location) {
-                const { lat, lng } = googleRes.data.location;
-                const accuracy = googleRes.data.accuracy || 99999;
-                // Reverse geocode the Google result
-                const nominatim = await axios.get(
-                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-                    { headers: { 'User-Agent': 'NyayaAI/1.0' }, timeout: 5000 }
+        if (process.env.GOOGLE_GEOLOCATION_API_KEY) {
+            try {
+                const googleRes = await axios.post(
+                    `https://www.googleapis.com/geolocation/v1/geolocate?key=${process.env.GOOGLE_GEOLOCATION_API_KEY}`,
+                    { considerIp: true },
+                    { timeout: 5000 }
                 );
-                if (nominatim.data?.address) {
-                    const addr = nominatim.data.address;
-                    const parts = [
-                        addr.village || addr.hamlet || addr.town || addr.suburb || '',
-                        addr.city || addr.county || addr.state_district || '',
-                        addr.state || '',
-                        addr.postcode || ''
-                    ].filter(Boolean);
-                    results.push({
-                        source: 'google',
-                        location: [...new Set(parts)].join(', '),
-                        lat, lng, accuracy
-                    });
+                if (googleRes.data?.location) {
+                    const { lat, lng } = googleRes.data.location;
+                    const accuracy = googleRes.data.accuracy || 99999;
+                    const nominatim = await axios.get(
+                        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+                        { headers: { 'User-Agent': 'NyayaAI/1.0' }, timeout: 5000 }
+                    );
+                    if (nominatim.data?.address) {
+                        const addr = nominatim.data.address;
+                        const parts = [
+                            addr.village || addr.hamlet || addr.town || addr.suburb || '',
+                            addr.city || addr.county || addr.state_district || '',
+                            addr.state || '',
+                            addr.postcode || ''
+                        ].filter(Boolean);
+                        results.push({
+                            source: 'google',
+                            location: [...new Set(parts)].join(', '),
+                            lat, lng, accuracy
+                        });
+                    }
                 }
+            } catch (e) {
+                console.log('Google Geolocation API not available:', e.response?.data?.error?.message || e.message);
             }
-        } catch (e) {
-            console.log('Google Geolocation API not available:', e.response?.data?.error?.message || e.message);
         }
 
         // Strategy 2: ip-api.com (free, good for India)

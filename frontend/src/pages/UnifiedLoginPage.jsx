@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import LoginPage from './LoginPage';
 import TOTPLogin from '../components/TOTPLogin';
 

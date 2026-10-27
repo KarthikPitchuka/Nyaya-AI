@@ -1,145 +1,152 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { MapPin, AlertCircle, Loader2, Search, X } from 'lucide-react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { MapPin, Loader2, Search, X } from 'lucide-react';
 
 const LocationContext = createContext();
 
 export const useLocation = () => useContext(LocationContext);
+
+const locationOptions = {
+    enableHighAccuracy: true,
+    timeout: 10000,
+    maximumAge: 0
+};
 
 export const LocationProvider = ({ children }) => {
     const [locationStr, setLocationStr] = useState('');
     const [isLoadingLocation, setIsLoadingLocation] = useState(false);
     const [locationError, setLocationError] = useState('');
     const [coords, setCoords] = useState(null);
+    const [locationAccuracy, setLocationAccuracy] = useState(null);
     const [showBanner, setShowBanner] = useState(false);
     const [isManualMode, setIsManualMode] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
+    const locationRequestIdRef = useRef(0);
+    const updateManualMode = (enabled) => {
+        if (enabled) {
+            locationRequestIdRef.current++;
+            setIsLoadingLocation(false);
+        }
+        setIsManualMode(enabled);
+    };
 
-    const fetchLocation = async (triggeredByUser = false) => {
+    const fetchLocation = useCallback(async () => {
+        const requestId = ++locationRequestIdRef.current;
         setIsLoadingLocation(true);
         setLocationError('');
         setIsManualMode(false);
+        setCoords(null);
+        setLocationAccuracy(null);
 
-        const tryBackendIpLocation = async () => {
-            try {
-                const res = await fetch('http://localhost:5000/api/geolocation', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                const data = await res.json();
-                if (data.success && data.best && data.best.location) {
-                    setLocationStr(data.best.location);
-                    localStorage.setItem('nyaya_user_location', data.best.location);
-                    if (data.best.lat && data.best.lng) {
-                        setCoords({ latitude: data.best.lat, longitude: data.best.lng });
-                    }
-                    setShowBanner(false);
-                    return true;
-                }
-            } catch (err) {
-                console.error("Backend IP Geolocation fallback failed:", err);
-            }
-            return false;
-        };
-
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                async (position) => {
-                    const { latitude, longitude } = position.coords;
-                    setCoords({ latitude, longitude });
-
-                    try {
-                        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`;
-                        const res = await fetch(url);
-                        const data = await res.json();
-
-                        if (data && data.address) {
-                            const addr = data.address;
-                            const parts = [
-                                addr.building || addr.amenity || addr.road || addr.suburb || addr.neighbourhood || addr.village || addr.hamlet || addr.town || '',
-                                addr.city || addr.county || addr.state_district || '',
-                                addr.state || '',
-                                addr.postcode || ''
-                            ].filter(Boolean);
-
-                            const locationString = [...new Set(parts)].join(', ');
-                            setLocationStr(locationString);
-                            localStorage.setItem('nyaya_user_location', locationString);
-                            setLocationError('');
-                            setShowBanner(false);
-                            setIsLoadingLocation(false);
-                            return;
-                        }
-                    } catch (err) {
-                        console.error("Live GPS reverse geocoding failed:", err);
-                    }
-
-                    const fallback = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-                    setLocationStr(fallback);
-                    localStorage.setItem('nyaya_user_location', fallback);
-                    setShowBanner(false);
-                    setIsLoadingLocation(false);
-                },
-                async (error) => {
-                    console.log("Live GPS failed or denied, trying IP location fallback...", error.message);
-                    const success = await tryBackendIpLocation();
-                    setIsLoadingLocation(false);
-
-                    if (!success) {
-                        let msg = "Location Error";
-                        switch (error.code) {
-                            case error.PERMISSION_DENIED:
-                                msg = "Location access denied. Click 'Enter Manually' to select your location.";
-                                break;
-                            case error.POSITION_UNAVAILABLE:
-                                msg = "Location information is unavailable.";
-                                break;
-                            case error.TIMEOUT:
-                                msg = "Location request timed out.";
-                                break;
-                            default:
-                                msg = "An unknown error occurred.";
-                                break;
-                        }
-                        setLocationError(msg);
-                        setShowBanner(true);
-                    }
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-        } else {
-            const success = await tryBackendIpLocation();
+        if (!navigator.geolocation) {
+            setLocationError('This browser does not support device location. Enter your location manually.');
+            setShowBanner(true);
             setIsLoadingLocation(false);
-            if (!success) {
-                setLocationError("Geolocation is not supported by your browser.");
-                setShowBanner(true);
-            }
+            return;
         }
-    };
+
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                if (requestId !== locationRequestIdRef.current) return;
+
+                const { latitude, longitude, accuracy } = position.coords;
+                setCoords({ latitude, longitude });
+                setLocationAccuracy(Math.round(accuracy));
+                const isApproximate = accuracy > 1000;
+
+                try {
+                    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`;
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`Reverse geocoder returned ${response.status}`);
+                    const data = await response.json();
+                    if (requestId !== locationRequestIdRef.current) return;
+
+                    const address = data?.address;
+                    const locality = address?.village || address?.hamlet ||
+                        address?.town || address?.city || address?.municipality ||
+                        address?.suburb || address?.neighbourhood || '';
+                    const city = address?.city || address?.town ||
+                        address?.municipality || address?.county ||
+                        address?.state_district || '';
+                    const parts = [
+                        address?.road,
+                        locality,
+                        city,
+                        address?.state,
+                        address?.postcode
+                    ].filter(Boolean);
+                    const locationString = [...new Set(parts)].join(', ');
+                    setLocationStr(locationString || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+                } catch (error) {
+                    if (requestId !== locationRequestIdRef.current) return;
+                    console.error('Reverse geocoding failed:', error);
+                    setLocationStr(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+                }
+
+                if (requestId === locationRequestIdRef.current) {
+                    setLocationError(isApproximate
+                        ? 'Device location is approximate. Verify it or enter your location manually.'
+                        : '');
+                    setShowBanner(isApproximate);
+                    setIsLoadingLocation(false);
+                }
+            },
+            (error) => {
+                if (requestId !== locationRequestIdRef.current) return;
+                let message;
+                switch (error.code) {
+                    case 1:
+                        message = 'Location permission was denied. Allow location access or enter your location manually.';
+                        break;
+                    case 2:
+                        message = 'Location information is unavailable. Check your device location settings or enter your location manually.';
+                        break;
+                    case 3:
+                        message = 'Device location timed out after 10 seconds. Try again or enter your location manually.';
+                        break;
+                    default:
+                        message = 'An unknown location error occurred. Try again or enter your location manually.';
+                }
+                setLocationError(message);
+                setShowBanner(true);
+                setIsLoadingLocation(false);
+            },
+            // High accuracy requests the best fix the browser can provide; it cannot force GPS hardware.
+            locationOptions
+        );
+    }, []);
 
     const searchLocation = async (query) => {
         if (!query || query.length < 3) return;
         setIsLoadingLocation(true);
+        setLocationError('');
         try {
             const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=in&limit=5`;
             const res = await fetch(url);
+            if (!res.ok) throw new Error(`Location search returned ${res.status}`);
             const data = await res.json();
-            setSearchResults(data);
+            setSearchResults(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error("Search error:", err);
             setLocationError("Search failed. Please try again.");
+            setSearchResults([]);
         } finally {
             setIsLoadingLocation(false);
         }
     };
 
     const selectLocation = (result) => {
+        locationRequestIdRef.current++;
         const name = result.display_name;
         // Clean up the name (take first few parts)
         const parts = name.split(',').slice(0, 4).join(',').trim();
         setLocationStr(parts);
-        localStorage.setItem('nyaya_user_location', parts);
-        setCoords({ latitude: result.lat, longitude: result.lon });
+        setCoords({
+            latitude: Number(result.lat),
+            longitude: Number(result.lon)
+        });
+        setLocationAccuracy(null);
+        setLocationError('');
         setIsManualMode(false);
         setSearchQuery('');
         setSearchResults([]);
@@ -148,13 +155,9 @@ export const LocationProvider = ({ children }) => {
 
     // Initial attempt on mount
     useEffect(() => {
-        const savedLocation = localStorage.getItem('nyaya_user_location');
-        if (savedLocation) {
-            setLocationStr(savedLocation);
-        }
-        // Always trigger fresh detection on launch so all browsers show the real live location
-        fetchLocation(false);
-    }, []);
+        // Do not reuse per-browser saved locations; they may be stale or differ between profiles.
+        fetchLocation();
+    }, [fetchLocation]);
 
     return (
         <LocationContext.Provider value={{
@@ -162,14 +165,14 @@ export const LocationProvider = ({ children }) => {
             isLoadingLocation,
             locationError,
             coords,
+            locationAccuracy,
             isManualMode,
-            setIsManualMode,
+            setIsManualMode: updateManualMode,
             searchLocation,
             searchResults,
             selectLocation,
             refreshLocation: () => {
-                localStorage.removeItem('nyaya_user_location');
-                fetchLocation(true);
+                fetchLocation();
             }
         }}>
             {/* 📍 Sticky Location Permission Banner */}
@@ -180,7 +183,9 @@ export const LocationProvider = ({ children }) => {
                             <MapPin className="h-5 w-5 animate-bounce" />
                         </div>
                         <div>
-                            <p className="font-bold text-sm">Location Access Required</p>
+                            <p className="font-bold text-sm">
+                                {coords ? 'Location Needs Verification' : 'Location Access Required'}
+                            </p>
                             <p className="text-xs text-indigo-100">
                                 {locationError || "We need your location to help authorities reach you faster in case of a scam or emergency."}
                             </p>
@@ -188,7 +193,7 @@ export const LocationProvider = ({ children }) => {
                     </div>
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={() => setIsManualMode(true)}
+                            onClick={() => updateManualMode(true)}
                             className="text-white border border-white/30 hover:bg-white/10 px-4 py-2 rounded-lg font-bold text-sm transition-colors"
                         >
                             Enter Manually
@@ -204,7 +209,7 @@ export const LocationProvider = ({ children }) => {
                                     Detecting...
                                 </>
                             ) : (
-                                'Enable Location Now'
+                                coords ? 'Refresh Location' : 'Enable Location Now'
                             )}
                         </button>
                     </div>
@@ -217,7 +222,7 @@ export const LocationProvider = ({ children }) => {
                     <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-300">
                         <div className="bg-indigo-600 p-4 text-white flex justify-between items-center">
                             <h3 className="font-bold">Set Your Location Manually</h3>
-                            <button onClick={() => setIsManualMode(false)} className="hover:bg-white/20 p-1 rounded-full"><X size={20} /></button>
+                            <button onClick={() => updateManualMode(false)} className="hover:bg-white/20 p-1 rounded-full"><X size={20} /></button>
                         </div>
                         <div className="p-6">
                             <div className="relative">

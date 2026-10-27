@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { AlertOctagon, PhoneCall, Crosshair, X, Loader2, CheckCircle2, User, Phone, Mic, Smartphone } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { AlertOctagon, PhoneCall, Crosshair, X, Loader2, CheckCircle2, User, Mic, Smartphone } from 'lucide-react';
 import axios from 'axios';
 import { useLocation } from '../context/LocationContext';
+import { API_BASE_URL } from '../config/api';
+import { getAudioFileExtension, getAudioRecordingOptions } from '../utils/audioRecording';
 
 const EmergencyReportModal = ({ isOpen, onClose, userPhone }) => {
-    const { locationStr } = useLocation();
+    const { locationStr, coords, locationAccuracy } = useLocation();
     const [attackerPhone, setAttackerPhone] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [result, setResult] = useState(null);
@@ -16,6 +18,9 @@ const EmergencyReportModal = ({ isOpen, onClose, userPhone }) => {
 
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
+    const isOpenRef = useRef(isOpen);
+    const recordingRequestRef = useRef(0);
+    isOpenRef.current = isOpen;
 
     // Format recording time
     const formatTime = (secs) => {
@@ -45,11 +50,21 @@ const EmergencyReportModal = ({ isOpen, onClose, userPhone }) => {
     }, [isRecording]);
 
     const startRecording = async () => {
+        const requestId = ++recordingRequestRef.current;
+        let stream;
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream);
+            if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+                throw new Error('Audio recording is not supported in this browser.');
+            }
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            if (!isOpenRef.current || requestId !== recordingRequestRef.current) {
+                stream.getTracks().forEach(track => track.stop());
+                return;
+            }
+            const mediaRecorder = new MediaRecorder(stream, getAudioRecordingOptions());
             mediaRecorderRef.current = mediaRecorder;
             audioChunksRef.current = [];
+            setAudioBlob(null);
 
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -61,12 +76,17 @@ const EmergencyReportModal = ({ isOpen, onClose, userPhone }) => {
             setIsRecording(true);
             setRecordingTime(0);
         } catch (err) {
-            console.warn("Microphone access denied or not available (this is normal if permission is dismissed):", err.message);
+            stream?.getTracks().forEach(track => track.stop());
+            if (requestId === recordingRequestRef.current && isOpenRef.current) {
+                setIsRecording(false);
+                console.warn('Microphone access denied or unavailable:', err.message);
+            }
             // Non-blocking: user can still submit report without audio
         }
     };
 
     const stopRecordingContext = () => {
+        recordingRequestRef.current++;
         if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
             mediaRecorderRef.current.stop();
             mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
@@ -77,13 +97,15 @@ const EmergencyReportModal = ({ isOpen, onClose, userPhone }) => {
     const stopRecordingAndGetBlob = () => {
         return new Promise((resolve) => {
             if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-                mediaRecorderRef.current.onstop = () => {
-                    const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                const recorder = mediaRecorderRef.current;
+                recorder.onstop = () => {
+                    const mimeType = recorder.mimeType || audioChunksRef.current[0]?.type || 'application/octet-stream';
+                    const blob = new Blob(audioChunksRef.current, { type: mimeType });
                     setAudioBlob(blob);
                     resolve(blob);
                 };
-                mediaRecorderRef.current.stop();
-                mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+                recorder.stop();
+                recorder.stream.getTracks().forEach(track => track.stop());
                 setIsRecording(false);
             } else {
                 resolve(audioBlob);
@@ -114,20 +136,36 @@ const EmergencyReportModal = ({ isOpen, onClose, userPhone }) => {
             const finalAudioBlob = await stopRecordingAndGetBlob();
 
             // Get user's current location from context or storage
-            let userLoc = locationStr || localStorage.getItem('nyaya_user_location') || '';
-            let victimPhone = userPhone || localStorage.getItem('nyaya_user_phone') || '';
+            const userLoc = locationStr || '';
+            const firebaseToken = localStorage.getItem('nyaya_auth_token');
+            if (!firebaseToken || firebaseToken.startsWith('dev_mock_token_')) {
+                throw new Error('Please sign in with Firebase phone authentication before submitting an emergency report.');
+            }
 
             const formData = new FormData();
             formData.append('attackerPhone', attackerPhone);
-            if (victimPhone) formData.append('userPhone', victimPhone);
             if (userLoc) formData.append('userLocation', userLoc);
-
-            if (finalAudioBlob) {
-                formData.append('audio', finalAudioBlob, 'emergency_recording.webm');
+            if (coords) {
+                formData.append('locationLatitude', String(coords.latitude));
+                formData.append('locationLongitude', String(coords.longitude));
+                if (locationAccuracy !== null) {
+                    formData.append('locationAccuracy', String(locationAccuracy));
+                }
             }
 
-            const response = await axios.post('http://localhost:5000/api/reports/emergency', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+            if (finalAudioBlob) {
+                formData.append(
+                    'audio',
+                    finalAudioBlob,
+                    `emergency_recording.${getAudioFileExtension(finalAudioBlob.type)}`
+                );
+            }
+
+            const response = await axios.post(`${API_BASE_URL}/api/reports/emergency`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    Authorization: `Bearer ${firebaseToken}`
+                }
             });
 
             if (response.data.success) {
@@ -227,14 +265,14 @@ const EmergencyReportModal = ({ isOpen, onClose, userPhone }) => {
                                 <div>
                                     <strong className="block text-sm text-blue-900">Is the scam call ongoing?</strong>
                                     <p className="text-xs text-blue-700 mt-1">
-                                        Keep the attacker on the line. Enter their number below. Both your number and the attacker's number will be sent to the Cyber Crime Department for instant tracking.
+                                        Keep the attacker on the line. Enter their number below. Both your number and the attacker&apos;s number will be sent to the Cyber Crime Department for instant tracking.
                                     </p>
                                 </div>
                             </div>
 
                             <div>
                                 <label className="flex items-center justify-between text-sm font-bold text-gray-700 mb-2">
-                                    <span>Attacker's Phone Number</span>
+                                    <span>Attacker&apos;s Phone Number</span>
                                     <button
                                         type="button"
                                         onClick={simulateCallerDetection}
@@ -294,7 +332,7 @@ const EmergencyReportModal = ({ isOpen, onClose, userPhone }) => {
                             </button>
 
                             <p className="text-xs text-gray-400 text-center">
-                                Both your number (+91 {userPhone}) and the attacker's number will be submitted to the Cyber Crime Tracking Unit.
+                                Both your number (+91 {userPhone}) and the attacker&apos;s number will be submitted to the Cyber Crime Tracking Unit.
                             </p>
                         </form>
                     )}

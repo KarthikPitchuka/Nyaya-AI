@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Lock, ArrowRight, Loader2 } from 'lucide-react';
+import { API_BASE_URL } from '../config/api';
 
 export default function TOTPLogin({ onLoginSuccess }) {
   const [step, setStep] = useState('email'); // 'email' | 'qr' | 'verify'
@@ -15,7 +16,7 @@ export default function TOTPLogin({ onLoginSuccess }) {
     setIsLoading(true);
 
     try {
-      const res = await fetch('http://localhost:5000/api/auth/totp/setup', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/totp/setup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
@@ -44,7 +45,7 @@ export default function TOTPLogin({ onLoginSuccess }) {
 
     setIsLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/api/auth/totp/verify', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/totp/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, token })

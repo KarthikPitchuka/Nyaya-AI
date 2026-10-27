@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Shield, Search, MapPin, Phone, Activity, FileText, CheckCircle2, ShieldAlert, LogOut, Check, Play, Pause, Crosshair } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Shield, MapPin, Phone, Activity, FileText, CheckCircle2, ShieldAlert, LogOut, Check, Crosshair } from 'lucide-react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from '../../config/api';
 
 const CyberDashboard = () => {
     const [reports, setReports] = useState([]);
@@ -12,21 +13,15 @@ const CyberDashboard = () => {
     const navigate = useNavigate();
     const user = JSON.parse(localStorage.getItem('cyber_user'));
 
-    useEffect(() => {
-        if (!localStorage.getItem('cyber_token')) {
-            navigate('/cyber/login');
-            return;
-        }
-        fetchReports();
-    }, [navigate]);
-
-    const fetchReports = async () => {
+    const fetchReports = useCallback(async () => {
         try {
-            const res = await axios.get('http://localhost:5000/api/reports/emergency');
+            const token = localStorage.getItem('cyber_token');
+            const res = await axios.get(`${API_BASE_URL}/api/reports/emergency`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
             if (res.data.success) {
                 setReports(res.data.data);
 
-                // Initialize input states for unresolved reports
                 const actions = {};
                 const statuses = {};
                 res.data.data.forEach(r => {
@@ -42,16 +37,26 @@ const CyberDashboard = () => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [navigate]);
+
+    useEffect(() => {
+        if (!localStorage.getItem('cyber_token')) {
+            navigate('/cyber/login');
+            return;
+        }
+        fetchReports();
+    }, [navigate, fetchReports]);
 
     const handleUpdate = async (id) => {
         try {
             const actionTaken = actionInputs[id];
             const status = statusInputs[id];
 
-            await axios.put(`http://localhost:5000/api/reports/emergency/${id}/status`, {
+            await axios.put(`${API_BASE_URL}/api/reports/emergency/${id}/status`, {
                 status,
                 actionTaken
+            }, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('cyber_token')}` }
             });
             fetchReports(); // Refresh data
         } catch (err) {
@@ -167,7 +172,7 @@ const CyberDashboard = () => {
                                                 <FileText size={14} /> Audio Evidence Attached
                                             </h3>
                                             <audio controls className="w-full h-10"   >
-                                                <source src={`http://localhost:5000${report.audioUrl}`} type="audio/webm" />
+                                                <source src={`${API_BASE_URL}${report.audioUrl}`} type="audio/webm" />
                                                 Your browser does not support the audio element.
                                             </audio>
                                         </div>

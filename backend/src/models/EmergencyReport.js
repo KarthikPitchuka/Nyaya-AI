@@ -1,10 +1,20 @@
 import mongoose from 'mongoose';
 
 const emergencyReportSchema = new mongoose.Schema({
+    userUid: { type: String, index: true },
     userPhone: { type: String, default: '' },
     attackerPhone: { type: String, required: true },
     userLocation: { type: String, default: '' },
-    status: { type: String, default: 'Pending Review' },
+    locationCoordinates: {
+        latitude: { type: Number },
+        longitude: { type: Number },
+        accuracy: { type: Number }
+    },
+    status: {
+        type: String,
+        enum: ['Pending Review', 'Under Review', 'Resolved'],
+        default: 'Pending Review'
+    },
     department: { type: String, default: 'Cyber Crime Tracking Unit' },
     audioUrl: { type: String, default: null },
     actionTaken: { type: String, default: null },

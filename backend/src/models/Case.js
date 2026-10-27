@@ -4,6 +4,11 @@ const CaseSchema = new mongoose.Schema({
     userPhone: { type: String }, // Links case to the logged-in user
     userPrompt: { type: String, required: true },
     location: { type: String }, // Stores physical address during analysis
+    locationCoordinates: {
+        latitude: { type: Number },
+        longitude: { type: Number },
+        accuracy: { type: Number }
+    },
     language: { type: String, default: 'en' },
     translatedText: { type: String },
     caseType: { type: String, required: true },

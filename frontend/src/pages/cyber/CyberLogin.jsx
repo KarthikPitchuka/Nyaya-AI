@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Shield, Lock, User, AlertTriangle, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from '../../config/api';
 
 const CyberLogin = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
-    const [role, setRole] = useState('Agent');
+    const [registrationCode, setRegistrationCode] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
@@ -21,16 +22,22 @@ const CyberLogin = () => {
 
         try {
             if (isLogin) {
-                const res = await axios.post('http://localhost:5000/api/cyber/auth/login', { email, password });
+                const res = await axios.post(`${API_BASE_URL}/api/cyber/auth/login`, { email, password });
                 if (res.data.success) {
                     localStorage.setItem('cyber_token', res.data.token);
                     localStorage.setItem('cyber_user', JSON.stringify(res.data.user));
                     navigate('/cyber/dashboard');
                 }
             } else {
-                const res = await axios.post('http://localhost:5000/api/cyber/auth/register', { email, password, name, role });
+                const res = await axios.post(`${API_BASE_URL}/api/cyber/auth/register`, {
+                    email,
+                    password,
+                    name,
+                    registrationCode
+                });
                 if (res.data.success) {
                     setIsLogin(true);
+                    setRegistrationCode('');
                     setError('Registration successful. Please login.');
                 }
             }
@@ -83,19 +90,21 @@ const CyberLogin = () => {
                                         />
                                     </div>
                                 </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Clearance Level</label>
-                                    <select
-                                        value={role}
-                                        onChange={(e) => setRole(e.target.value)}
-                                        className="w-full px-4 py-3 bg-gray-950 border border-gray-800 rounded-xl text-white focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors appearance-none"
-                                    >
-                                        <option value="Agent">Tracking Agent</option>
-                                        <option value="Supervisor">Supervisor</option>
-                                        <option value="Admin">System Admin</option>
-                                    </select>
-                                </div>
                             </>
+                        )}
+
+                        {!isLogin && (
+                            <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Official Registration Code</label>
+                                <input
+                                    type="password"
+                                    value={registrationCode}
+                                    onChange={(e) => setRegistrationCode(e.target.value)}
+                                    className="w-full px-4 py-3 bg-gray-950 border border-gray-800 rounded-xl text-white focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors"
+                                    autoComplete="off"
+                                    required
+                                />
+                            </div>
                         )}
 
                         <div>
@@ -127,7 +136,7 @@ const CyberLogin = () => {
 
                         <button
                             type="submit"
-                            disabled={isLoading || !email || !password}
+                            disabled={isLoading || !email || !password || (!isLogin && !registrationCode)}
                             className="w-full flex items-center justify-center gap-2 py-3.5 bg-green-600 hover:bg-green-500 text-black font-black uppercase tracking-wider rounded-xl shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all hover:shadow-[0_0_25px_rgba(34,197,94,0.5)] disabled:opacity-50 mt-4"
                         >
                             {isLoading ? <Loader2 size={20} className="animate-spin" /> : (isLogin ? 'Initialize Uplink' : 'Register clearance')}

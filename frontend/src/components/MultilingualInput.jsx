@@ -1,86 +1,151 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Mic, Send, Loader2, StopCircle, Paperclip, X, FileText, Image as ImageIcon, Volume2, VolumeX, MapPin, RefreshCw, Pause, Play } from 'lucide-react';
 import axios from 'axios';
 import { useLocation } from '../context/LocationContext';
 import { useTTS } from '../context/TTSContext';
+import { API_BASE_URL } from '../config/api';
+import { getAudioFileExtension, getAudioRecordingOptions } from '../utils/audioRecording';
 
 const MultilingualInput = ({ onAnalyze }) => {
-    const { locationStr, isLoadingLocation, locationError, refreshLocation, setIsManualMode } = useLocation();
+    const {
+        locationStr,
+        coords,
+        locationAccuracy,
+        isLoadingLocation,
+        locationError,
+        refreshLocation,
+        setIsManualMode
+    } = useLocation();
     const [inputText, setInputText] = useState('');
     const [isRecording, setIsRecording] = useState(false);
     const [isTranscribing, setIsTranscribing] = useState(false);
+    const [voiceError, setVoiceError] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
-    const [mediaRecorder, setMediaRecorder] = useState(null);
-    const [audioChunks, setAudioChunks] = useState([]);
     const [attachments, setAttachments] = useState([]);
     const { isPlaying, isPaused, isLoading, activeId, play, pause, resume, stop } = useTTS();
 
     const fileInputRef = useRef(null);
+    const mediaRecorderRef = useRef(null);
+    const recordingStreamRef = useRef(null);
+    const isMountedRef = useRef(true);
+    const audioChunksRef = useRef([]);
+    const isLocationApproximate = locationAccuracy !== null && locationAccuracy > 1000;
 
-
-
-    // Removed unused voice preloading to clean up lint issues.
-    // window.speechSynthesis handles voice selection internally or via defaults.
-
-    // Clean up media recorder on unmount
     useEffect(() => {
+        isMountedRef.current = true;
         return () => {
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
+            isMountedRef.current = false;
+            const recorder = mediaRecorderRef.current;
+            if (recorder && recorder.state !== 'inactive') {
+                recorder.stop();
             }
+            recordingStreamRef.current?.getTracks().forEach(track => track.stop());
         };
-    }, [mediaRecorder]);
+    }, []);
 
     const toggleRecording = async () => {
         if (isRecording) {
-            // Stop recording
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-                setIsRecording(false);
+            const recorder = mediaRecorderRef.current;
+            if (recorder && recorder.state !== 'inactive') recorder.stop();
+            setIsRecording(false);
+            return;
+        }
+
+        if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+            setVoiceError(!window.isSecureContext
+                ? 'Microphone access requires HTTPS or localhost. Open the app using a secure connection.'
+                : 'Voice recording is not supported in this browser. Please type your issue instead.');
+            return;
+        }
+
+        setVoiceError('');
+        let stream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            if (!isMountedRef.current) {
+                stream.getTracks().forEach(track => track.stop());
+                return;
             }
-        } else {
-            // Start recording
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                const recorder = new MediaRecorder(stream);
-                const chunks = [];
+            const recorder = new MediaRecorder(stream, getAudioRecordingOptions());
+            recordingStreamRef.current = stream;
+            audioChunksRef.current = [];
+            let recordingFailed = false;
 
-                recorder.ondataavailable = (e) => {
-                    if (e.data.size > 0) chunks.push(e.data);
-                };
+            recorder.ondataavailable = (event) => {
+                if (event.data.size > 0) audioChunksRef.current.push(event.data);
+            };
 
-                recorder.onstop = async () => {
-                    setIsTranscribing(true);
-                    const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+            recorder.onerror = (event) => {
+                recordingFailed = true;
+                console.error('Audio recording failed:', event.error || event);
+                stream.getTracks().forEach(track => track.stop());
+                if (recordingStreamRef.current === stream) recordingStreamRef.current = null;
+                if (mediaRecorderRef.current === recorder) mediaRecorderRef.current = null;
+                if (isMountedRef.current) {
+                    setIsRecording(false);
+                    setVoiceError('Audio recording failed. Check your microphone and try again.');
+                }
+            };
 
-                    // Cleanup stream
-                    stream.getTracks().forEach(track => track.stop());
+            recorder.onstop = async () => {
+                stream.getTracks().forEach(track => track.stop());
+                if (recordingStreamRef.current === stream) recordingStreamRef.current = null;
+                if (mediaRecorderRef.current === recorder) mediaRecorderRef.current = null;
+                if (!isMountedRef.current || recordingFailed) return;
 
-                    // Send to backend for AI transcription
-                    try {
-                        const formData = new FormData();
-                        formData.append('audio', audioBlob, 'recording.webm');
+                const mimeType = recorder.mimeType || audioChunksRef.current[0]?.type || 'application/octet-stream';
+                const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+                audioChunksRef.current = [];
+                if (!audioBlob.size) {
+                    setIsRecording(false);
+                    setVoiceError('No audio was captured. Check your microphone and try again.');
+                    return;
+                }
 
-                        const response = await axios.post('http://localhost:5000/api/cases/transcribe', formData);
-                        if (response.data?.success && response.data.transcript) {
-                            setInputText(prev => (prev + ' ' + response.data.transcript).trim());
-                        }
-                    } catch (err) {
-                        console.error("Transcription failed:", err);
-                        alert("AI Transcription failed. Please type your issue or check your backend server.");
-                    } finally {
-                        setIsTranscribing(false);
+                setIsTranscribing(true);
+                try {
+                    const formData = new FormData();
+                    formData.append(
+                        'audio',
+                        audioBlob,
+                        `recording.${getAudioFileExtension(mimeType)}`
+                    );
+
+                    const response = await axios.post(`${API_BASE_URL}/api/cases/transcribe`, formData);
+                    const transcript = response.data?.transcript?.trim();
+                    if (response.data?.success && transcript) {
+                        setInputText(prev => `${prev} ${transcript}`.trim());
+                    } else {
+                        throw new Error(response.data?.message || 'No speech was recognized.');
                     }
-                };
+                } catch (error) {
+                    console.error('Transcription failed:', error);
+                    if (isMountedRef.current) {
+                        const message = error.response?.data?.message ||
+                            (error.response
+                                ? 'Voice transcription failed. Please try recording again or type your issue.'
+                                : 'Could not reach the transcription server. Check that the backend is running and try again.');
+                        setVoiceError(message);
+                    }
+                } finally {
+                    if (isMountedRef.current) setIsTranscribing(false);
+                }
+            };
 
-                setMediaRecorder(recorder);
-                setAudioChunks([]);
-                recorder.start();
-                setIsRecording(true);
-            } catch (err) {
-                console.error("Recording failed:", err);
-                alert("Could not access microphone. Please check your browser permissions.");
-            }
+            mediaRecorderRef.current = recorder;
+            recorder.start();
+            setIsRecording(true);
+        } catch (error) {
+            stream?.getTracks().forEach(track => track.stop());
+            recordingStreamRef.current = null;
+            console.error('Recording failed:', error);
+            setVoiceError(error.name === 'NotAllowedError'
+                ? 'Microphone permission was denied. Allow microphone access in browser settings, then try again.'
+                : error.name === 'NotFoundError'
+                    ? 'No microphone was found. Connect or enable a microphone, then try again.'
+                    : error.name === 'NotReadableError'
+                        ? 'The microphone is unavailable or being used by another app. Close other apps using it and try again.'
+                        : 'Could not start microphone recording. Check the browser permissions and microphone.');
         }
     };
 
@@ -109,6 +174,13 @@ const MultilingualInput = ({ onAnalyze }) => {
             if (inputText.trim()) formData.append('prompt', inputText);
 
             if (locationStr) formData.append('location', locationStr);
+            if (coords) {
+                formData.append('locationLatitude', String(coords.latitude));
+                formData.append('locationLongitude', String(coords.longitude));
+                if (locationAccuracy !== null) {
+                    formData.append('locationAccuracy', String(locationAccuracy));
+                }
+            }
 
             const userPhone = localStorage.getItem('nyaya_user_phone');
             if (userPhone) formData.append('userPhone', userPhone);
@@ -116,7 +188,7 @@ const MultilingualInput = ({ onAnalyze }) => {
                 formData.append('files', file);
             });
 
-            const response = await axios.post('http://localhost:5000/api/cases/analyze', formData, {
+            const response = await axios.post(`${API_BASE_URL}/api/cases/analyze`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 
@@ -140,7 +212,7 @@ const MultilingualInput = ({ onAnalyze }) => {
         <div className="w-full max-w-2xl mx-auto relative">
             <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 overflow-hidden relative z-20 transition-all duration-300 flex flex-col focus-within:ring-2 focus-within:ring-indigo-500/50">
                 {/* Visible Location Banner */}
-                <div className={`px-4 py-2 border-b flex items-center justify-between text-xs font-semibold ${locationError ? 'bg-red-50 border-red-100 text-red-700' : 'bg-green-50 border-green-100 text-green-700'
+                <div className={`px-4 py-2 border-b flex items-center justify-between text-xs font-semibold ${locationError && !locationAccuracy ? 'bg-red-50 border-red-100 text-red-700' : isLocationApproximate ? 'bg-amber-50 border-amber-100 text-amber-800' : 'bg-green-50 border-green-100 text-green-700'
                     }`}>
                     <div className="flex items-center gap-2 overflow-hidden flex-1">
                         <MapPin size={14} className="shrink-0" />
@@ -152,8 +224,20 @@ const MultilingualInput = ({ onAnalyze }) => {
                         ) : (
                             <div className="flex items-center gap-2 overflow-hidden w-full">
                                 <span className="truncate max-w-[70%]">
-                                    {locationError ? `Error: ${locationError}` : `Location: ${locationStr || 'Unknown'}`}
+                                    {locationStr
+                                        ? `Location: ${locationStr}`
+                                        : locationError || 'Location: Unknown'}
                                 </span>
+                                {locationAccuracy !== null && (
+                                    <span
+                                        className={`shrink-0 text-[10px] ${isLocationApproximate ? 'text-amber-700' : 'text-gray-500'}`}
+                                        title="Estimated device-location accuracy radius"
+                                    >
+                                        GPS ±{locationAccuracy >= 1000
+                                            ? `${(locationAccuracy / 1000).toFixed(1)} km`
+                                            : `${locationAccuracy} m`}
+                                    </span>
+                                )}
                                 <button
                                     type="button"
                                     onClick={() => setIsManualMode(true)}
@@ -164,6 +248,12 @@ const MultilingualInput = ({ onAnalyze }) => {
                             </div>
                         )}
                     </div>
+
+                    {voiceError && (
+                        <p className="px-5 pb-3 text-sm text-red-600" role="alert">
+                            {voiceError}
+                        </p>
+                    )}
                     <button
                         type="button"
                         onClick={refreshLocation}
@@ -180,7 +270,7 @@ const MultilingualInput = ({ onAnalyze }) => {
                     <textarea
                         value={inputText}
                         onChange={(e) => setInputText(e.target.value)}
-                        placeholder={isTranscribing ? "AI is transcribing your voice..." : "Type your legal issue here in any language (Telugu, Hindi, English, etc.) or use voice input&hellip;"}
+                        placeholder={isTranscribing ? "AI is transcribing your voice..." : "Type your legal issue here in any language (Telugu, Hindi, English, etc.) or use voice input..."}
                         className={`w-full h-32 px-5 py-4 text-gray-700 resize-none outline-none bg-transparent placeholder-gray-400 text-lg leading-relaxed ${isTranscribing ? 'opacity-50' : ''}`}
                         disabled={isTranscribing}
                     ></textarea>

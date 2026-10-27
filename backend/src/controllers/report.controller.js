@@ -1,7 +1,9 @@
 import Report from '../models/Report.js';
 import Case from '../models/Case.js';
 import EmergencyReport from '../models/EmergencyReport.js';
+import { parseLocationCoordinates } from '../utils/locationCoordinates.js';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 
 // Submit a new report to a department supervisor
 export const submitReport = async (req, res) => {
@@ -95,13 +97,22 @@ export const simulateTimeLapse = async (req, res) => {
 // Submit a high-priority ongoing call to the cyber crime tracking unit
 export const submitEmergencyReport = async (req, res) => {
     try {
-        const { attackerPhone, userPhone, userLocation } = req.body;
+        const { attackerPhone, userLocation } = req.body;
+        const userUid = req.firebaseUser?.uid;
+        const userPhone = req.firebaseUser?.phone_number?.replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '');
 
         // Extract uploaded audio file if any
         const audioUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
-        if (!attackerPhone) {
-            return res.status(400).json({ success: false, message: 'Phone number is required for emergency tracking.' });
+        if (!userUid || !userPhone || userPhone.length < 10 || userPhone.length > 15) {
+            return res.status(403).json({ success: false, message: 'A verified phone number is required to submit an emergency report.' });
+        }
+        if (typeof attackerPhone !== 'string' || !attackerPhone.trim() || attackerPhone.length > 30) {
+            return res.status(400).json({ success: false, message: 'A valid phone number is required for emergency tracking.' });
+        }
+        const locationCoordinates = parseLocationCoordinates(req.body);
+        if (locationCoordinates === false) {
+            return res.status(400).json({ success: false, message: 'Location coordinates are invalid.' });
         }
 
         const uniqueString = crypto.randomBytes(4).toString('hex').toUpperCase();
@@ -109,20 +120,16 @@ export const submitEmergencyReport = async (req, res) => {
 
         const newEmergency = new EmergencyReport({
             attackerPhone,
-            userPhone: userPhone || '',
+            userUid,
+            userPhone,
             userLocation: userLocation || '',
+            locationCoordinates,
             audioUrl,
             trackingId
         });
         await newEmergency.save();
 
-        console.log(`\n🚨 ========== EMERGENCY CYBER REPORT ==========`);
-        console.log(`🚨 Tracking ID: ${trackingId}`);
-        console.log(`🚨 Victim Phone: ${userPhone || 'N/A'}`);
-        console.log(`🚨 Attacker Phone: ${attackerPhone}`);
-        console.log(`🚨 Victim Location: ${userLocation || 'N/A'}`);
-        if (audioUrl) console.log(`🚨 Audio Evidence Attached`);
-        console.log(`🚨 =============================================\n`);
+        console.info('Emergency report created:', trackingId);
 
         res.status(201).json({
             success: true,
@@ -152,11 +159,42 @@ export const getEmergencyReports = async (req, res) => {
     }
 };
 
+export const getMyEmergencyReports = async (req, res) => {
+    try {
+        const userUid = req.firebaseUser?.uid;
+        const userPhone = req.firebaseUser?.phone_number?.replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '');
+        if (!userUid || !userPhone) {
+            return res.status(403).json({ success: false, message: 'A verified phone number is required to view reports.' });
+        }
+
+        const reports = await EmergencyReport.find({
+            $or: [
+                { userUid },
+                { userUid: { $exists: false }, userPhone }
+            ]
+        }).sort({ createdAt: -1 });
+        res.status(200).json({ success: true, data: reports });
+    } catch (error) {
+        console.error('Get personal emergency reports error:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch your emergency reports.' });
+    }
+};
+
 // Update an emergency report (Add action taken & change status)
 export const updateEmergencyReportStatus = async (req, res) => {
     try {
         const { id } = req.params;
         const { status, actionTaken } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid emergency report ID.' });
+        }
+        if (status !== undefined && !['Pending Review', 'Under Review', 'Resolved'].includes(status)) {
+            return res.status(400).json({ success: false, message: 'Invalid emergency report status.' });
+        }
+        if (actionTaken !== undefined && (typeof actionTaken !== 'string' || actionTaken.length > 4000)) {
+            return res.status(400).json({ success: false, message: 'Action taken must be text no longer than 4000 characters.' });
+        }
 
         const report = await EmergencyReport.findById(id);
 

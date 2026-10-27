@@ -5,7 +5,9 @@ const IV_LENGTH = 12;
 
 function getKey() {
   const k = process.env.TOTP_ENC_KEY || process.env.ENCRYPTION_KEY;
-  if (!k) return null;
+  if (!k) {
+    throw new Error('TOTP_ENC_KEY must be configured to protect authenticator secrets.');
+  }
   // Expect base64 or hex; normalize to Buffer of length 32
   let buf = null;
   try { buf = Buffer.from(k, 'base64'); if (buf.length === 32) return buf; } catch (e) {}
@@ -13,15 +15,11 @@ function getKey() {
   // If raw length 32
   buf = Buffer.from(k);
   if (buf.length === 32) return buf;
-  return null;
+  throw new Error('TOTP_ENC_KEY must decode to exactly 32 bytes.');
 }
 
 export function encryptText(plain) {
   const key = getKey();
-  if (!key) {
-    // No key provided — store plaintext (not recommended)
-    return `plain:${plain}`;
-  }
 
   const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv(ALGO, key, iv, { authTagLength: 16 });
@@ -32,10 +30,6 @@ export function encryptText(plain) {
 
 export function decryptText(payload) {
   const key = getKey();
-  if (!key) {
-    if (typeof payload === 'string' && payload.startsWith('plain:')) return payload.slice(6);
-    return null;
-  }
 
   try {
     const data = Buffer.from(payload, 'base64');
@@ -47,7 +41,6 @@ export function decryptText(payload) {
     const dec = Buffer.concat([decipher.update(enc), decipher.final()]);
     return dec.toString('utf8');
   } catch (e) {
-    console.error('decryptText error', e);
     return null;
   }
 }

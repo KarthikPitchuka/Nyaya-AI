@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ShieldAlert, MapPin, Phone, Activity, FileText, CheckCircle2, Search, Crosshair } from 'lucide-react';
 import axios from 'axios';
+import { API_BASE_URL } from '../config/api';
 
 const MyEmergencyReports = ({ userPhone }) => {
     const [reports, setReports] = useState([]);
@@ -10,11 +11,17 @@ const MyEmergencyReports = ({ userPhone }) => {
         const fetchReports = async () => {
             if (!userPhone) return;
             try {
-                // To keep it simple, we filter existing emergency reports by the user's phone
-                const response = await axios.get('http://localhost:5000/api/reports/emergency');
+                const firebaseToken = localStorage.getItem('nyaya_auth_token');
+                if (!firebaseToken || firebaseToken.startsWith('dev_mock_token_')) {
+                    setReports([]);
+                    return;
+                }
+
+                const response = await axios.get(`${API_BASE_URL}/api/reports/emergency/mine`, {
+                    headers: { Authorization: `Bearer ${firebaseToken}` }
+                });
                 if (response.data.success) {
-                    const myReports = response.data.data.filter(r => r.userPhone === userPhone);
-                    setReports(myReports);
+                    setReports(response.data.data);
                 }
             } catch (err) {
                 console.error("Failed to fetch reports", err);
@@ -43,7 +50,7 @@ const MyEmergencyReports = ({ userPhone }) => {
                     <ShieldAlert size={32} className="text-gray-400" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900">No Emergency Reports</h3>
-                <p className="text-gray-500 mt-2">You haven't filed any emergency cyber tracking requests.</p>
+                <p className="text-gray-500 mt-2">You haven&apos;t filed any emergency cyber tracking requests.</p>
             </div>
         );
     }

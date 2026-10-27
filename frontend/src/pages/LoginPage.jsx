@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Phone, ArrowRight, Loader2, ShieldCheck, KeyRound } from 'lucide-react';
 import PropTypes from 'prop-types';
 import { auth } from '../config/firebase';
@@ -19,25 +19,6 @@ const LoginPage = ({ onLogin }) => {
         const timer = setTimeout(() => setCountdown(c => c - 1), 1000);
         return () => clearTimeout(timer);
     }, [countdown]);
-
-    // Web OTP API — auto-read OTP from SMS (Chrome Android only)
-    useEffect(() => {
-        if (step !== 'otp') return;
-        if ('OTPCredential' in window) {
-            const ac = new AbortController();
-            navigator.credentials.get({
-                otp: { transport: ['sms'] },
-                signal: ac.signal
-            }).then(otpCredential => {
-                if (otpCredential?.code) {
-                    const digits = otpCredential.code.split('');
-                    setOtp(digits.concat(Array(6 - digits.length).fill('')));
-                    handleVerifyOtp(otpCredential.code);
-                }
-            }).catch(() => { });
-            return () => ac.abort();
-        }
-    }, [step]);
 
     const setupRecaptcha = () => {
         if (!window.recaptchaVerifier) {
@@ -75,7 +56,7 @@ const LoginPage = ({ onLogin }) => {
         } catch (err) {
             console.error("Firebase OTP Error:", err);
             // Fallback for local development or when Firebase auth service/emulator is unreachable
-            if (err.code === 'auth/network-request-failed' || err.message?.includes('network-request-failed') || process.env.NODE_ENV === 'development') {
+            if (err.code === 'auth/network-request-failed' || err.message?.includes('network-request-failed') || import.meta.env.DEV) {
                 console.warn("Firebase network/emulator unreachable. Activating Dev Fallback OTP...");
                 window.isDevFallbackOtp = true;
                 setStep('otp');
@@ -111,7 +92,7 @@ const LoginPage = ({ onLogin }) => {
         if (pasted.length === 6) { setOtp(pasted.split('')); handleVerifyOtp(pasted); }
     };
 
-    const handleVerifyOtp = async (otpCode) => {
+    const handleVerifyOtp = useCallback(async (otpCode) => {
         const code = otpCode || otp.join('');
         if (code.length !== 6) return;
 
@@ -119,7 +100,7 @@ const LoginPage = ({ onLogin }) => {
         setIsLoading(true);
         try {
             if (window.isDevFallbackOtp) {
-                if (code === '123456' || code.length === 6) {
+                if (code === '123456') {
                     const cleanPhone = phone.replace(/\D/g, '');
                     setStep('success');
                     localStorage.setItem('nyaya_user_phone', cleanPhone);
@@ -137,9 +118,10 @@ const LoginPage = ({ onLogin }) => {
 
             if (user) {
                 const cleanPhone = phone.replace(/\D/g, '');
+                const idToken = await user.getIdToken();
                 setStep('success');
                 localStorage.setItem('nyaya_user_phone', cleanPhone);
-                localStorage.setItem('nyaya_auth_token', user.accessToken);
+                localStorage.setItem('nyaya_auth_token', idToken);
                 setTimeout(() => onLogin(cleanPhone), 1200);
             }
         } catch (err) {
@@ -150,7 +132,24 @@ const LoginPage = ({ onLogin }) => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [onLogin, otp, phone]);
+
+    // Web OTP API — auto-read OTP from SMS (Chrome Android only)
+    useEffect(() => {
+        if (step !== 'otp' || !('OTPCredential' in window)) return;
+        const ac = new AbortController();
+        navigator.credentials.get({
+            otp: { transport: ['sms'] },
+            signal: ac.signal
+        }).then(otpCredential => {
+            if (otpCredential?.code) {
+                const digits = otpCredential.code.split('');
+                setOtp(digits.concat(Array(6 - digits.length).fill('')));
+                handleVerifyOtp(otpCredential.code);
+            }
+        }).catch(() => {});
+        return () => ac.abort();
+    }, [step, handleVerifyOtp]);
 
     const handleResendOtp = async () => {
         if (countdown > 0) return;
