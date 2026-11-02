@@ -1,6 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import { fileURLToPath } from 'node:url';
 import connectDB from './src/config/db.js';
 import caseRoutes from './src/routes/case.routes.js';
 import reportRoutes from './src/routes/report.routes.js';
@@ -16,6 +17,7 @@ dotenv.config();
 connectDB();
 
 const app = express();
+const uploadDirectory = fileURLToPath(new URL('./uploads/', import.meta.url));
 
 // Middleware
 const allowedOrigins = [
@@ -35,7 +37,7 @@ app.use(cors({
 app.use(express.json());
 
 // Serve uploaded evidence files
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(uploadDirectory));
 
 // Main Routes (API Gateway)
 app.use('/api/cases', caseRoutes);
