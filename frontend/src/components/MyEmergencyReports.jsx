@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ShieldAlert, MapPin, Phone, Activity, FileText, CheckCircle2, Search, Crosshair } from 'lucide-react';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
+import { getFreshFirebaseIdToken } from '../config/firebase';
 
 const MyEmergencyReports = ({ userPhone }) => {
     const [reports, setReports] = useState([]);
@@ -11,7 +12,7 @@ const MyEmergencyReports = ({ userPhone }) => {
         const fetchReports = async () => {
             if (!userPhone) return;
             try {
-                const firebaseToken = localStorage.getItem('nyaya_auth_token');
+                const firebaseToken = await getFreshFirebaseIdToken();
                 if (!firebaseToken || firebaseToken.startsWith('dev_mock_token_')) {
                     setReports([]);
                     return;

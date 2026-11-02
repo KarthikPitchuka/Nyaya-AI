@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { classifyGeminiError, getApiKeys } from '../src/services/ai.service.js';
+import { classifyGeminiError, getApiKeys, normalizeComplexity, validateAnalysis } from '../src/services/ai.service.js';
 
 const originalApiKeys = process.env.GEMINI_API_KEYS;
 const originalApiKey = process.env.GEMINI_API_KEY;
@@ -32,6 +32,18 @@ test('getApiKeys ignores the sample placeholder value', () => {
     delete process.env.GEMINI_API_KEY;
 
     assert.deepEqual(getApiKeys(), []);
+});
+
+test('normalizes complexity score ranges and derives the matching persisted level', () => {
+    assert.deepEqual(normalizeComplexity(18), { complexity_score: 18, complexity_level: 'Simple' });
+    assert.deepEqual(normalizeComplexity('45'), { complexity_score: 45, complexity_level: 'Medium' });
+    assert.deepEqual(normalizeComplexity(82), { complexity_score: 82, complexity_level: 'Complex' });
+    assert.deepEqual(normalizeComplexity(120), { complexity_score: 100, complexity_level: 'Complex' });
+});
+
+test('rejects a missing or invalid complexity score instead of inventing one', () => {
+    assert.equal(normalizeComplexity(undefined), null);
+    assert.equal(normalizeComplexity('not a score'), null);
 });
 
 test('classifies rejected credentials as an authentication error, not a rate limit', () => {
@@ -74,4 +86,32 @@ test('classifies Gemini high-demand responses as temporary service failures', ()
         }),
         { code: 'AI_TEMPORARY_FAILURE', status: 503 }
     );
+});
+
+test('removes unsupported culpable-homicide rights from a wallet theft analysis', () => {
+    const analysis = {
+        complexity_score: 30,
+        user_rights: ['Section 299 of the Indian Penal Code — right to protection'],
+        legalRights: [{
+            right: 'Right to protection',
+            legalBasis: 'Section 299 of the Indian Penal Code',
+            explanation: 'Unsupported right'
+        }],
+        relevantProvisions: [{
+            act: 'Indian Penal Code',
+            section: 'Section 411',
+            title: 'Dishonestly receiving stolen property'
+        }]
+    };
+
+    validateAnalysis(analysis, [{
+        actTitle: 'Indian Penal Code',
+        section: 'Section 411',
+        heading: 'Dishonestly receiving stolen property',
+        fileName: 'ipc.json'
+    }]);
+
+    assert.deepEqual(analysis.legalRights, []);
+    assert.deepEqual(analysis.user_rights, []);
+    assert.equal(analysis.relevantProvisions[0].section, 'Section 411');
 });

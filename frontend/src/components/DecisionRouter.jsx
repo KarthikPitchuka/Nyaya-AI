@@ -82,7 +82,11 @@ const DecisionRouter = ({ analysis, caseId }) => {
         department_url,
         police_stations,
         legal_sources = [],
-        legal_source_notice
+        legal_source_notice,
+        legal_section_mapping = [],
+        relevantProvisions = [],
+        legalRights = [],
+        insufficientVerifiedInformation = false
     } = analysis;
 
     const getStyleForComplexity = (level) => {
@@ -179,7 +183,7 @@ const DecisionRouter = ({ analysis, caseId }) => {
                     </div>
                 </div>
 
-                {legal_sources.length > 0 && (
+                {(relevantProvisions.length > 0 || legal_sources.length > 0) && (
                     <section className="border-b border-gray-100 bg-slate-50 px-6 py-5 sm:px-8" aria-labelledby="legal-sources-heading">
                         <div className="flex items-start gap-3">
                             <div className="mt-0.5 rounded-lg bg-indigo-100 p-2 text-indigo-700">
@@ -191,15 +195,41 @@ const DecisionRouter = ({ analysis, caseId }) => {
                                     {legal_source_notice || 'These passages are references for review, not a determination that each provision applies or is currently in force.'}
                                 </p>
                                 <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                                    {legal_sources.map((source, index) => (
+                                    {(relevantProvisions.length > 0 ? relevantProvisions : legal_sources).map((source, index) => (
                                         <li key={`${source.fileName}-${source.section}-${index}`} className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
                                             <p className="text-sm font-semibold text-indigo-800">
-                                                {source.actTitle}{source.section ? `, ${source.section}` : ''}
+                                                {source.act || source.actTitle}{source.section ? `, ${source.section}` : ''}
+                                            </p>
+                                            {(source.title || source.heading) && <p className="mt-0.5 text-xs text-gray-600">{source.title || source.heading}</p>}
+                                            {source.relevance && <p className="mt-1 text-xs text-gray-600">{source.relevance}</p>}
+                                            <p className="mt-1 text-[11px] text-gray-400">
+                                                {source.source || source.fileName}{source.context ? ` · ${source.context}` : ''}
+                                            </p>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+                )}
+                {legal_section_mapping.length > 0 && (
+                    <section className="border-b border-gray-100 bg-emerald-50 px-6 py-5 sm:px-8" aria-labelledby="penal-sections-heading">
+                        <div className="flex items-start gap-3">
+                            <div className="mt-0.5 rounded-lg bg-emerald-100 p-2 text-emerald-700">
+                                <Scale size={18} aria-hidden="true" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <h4 id="penal-sections-heading" className="font-bold text-gray-900">Verified BNS / IPC matches</h4>
+                                <p className="mt-1 text-xs leading-relaxed text-gray-600">
+                                    These sections matched the configured local Acts collection. Confirm the current law before acting.
+                                </p>
+                                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                                    {legal_section_mapping.map((source, index) => (
+                                        <li key={`${source.actTitle}-${source.section}-${index}`} className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
+                                            <p className="text-sm font-semibold text-emerald-800">
+                                                {source.actTitle}, {source.section}
                                             </p>
                                             {source.heading && <p className="mt-0.5 text-xs text-gray-600">{source.heading}</p>}
-                                            <p className="mt-1 text-[11px] text-gray-400">
-                                                {source.actId}{source.context ? ` · ${source.context}` : ''}
-                                            </p>
                                         </li>
                                     ))}
                                 </ul>
@@ -369,10 +399,10 @@ const DecisionRouter = ({ analysis, caseId }) => {
                 </div>
 
                 {/* Additional Details Section: Rights & Mistakes */}
-                {(user_rights?.length > 0 || user_mistakes?.length > 0) && (
+                {(legalRights.length > 0 || (user_rights?.length > 0 && !insufficientVerifiedInformation) || user_mistakes?.length > 0) && (
                     <div className="p-8 grid md:grid-cols-2 gap-8 bg-white border-t border-gray-100">
                         {/* Legal Rights */}
-                        {user_rights?.length > 0 && (
+                        {(legalRights.length > 0 || (user_rights?.length > 0 && !insufficientVerifiedInformation)) && (
                             <div className="bg-green-50/50 p-6 rounded-xl border border-green-100 shadow-sm relative overflow-hidden">
                                 <div className="flex items-center justify-between mb-4">
                                     <h4 className="text-lg font-bold text-green-900 flex items-center gap-2">
@@ -382,7 +412,14 @@ const DecisionRouter = ({ analysis, caseId }) => {
                                     <TTSButton targetId="tts-section-rights" className="w-8 h-8 p-1.5 bg-green-100 border border-green-200" />
                                 </div>
                                 <ul id="tts-section-rights" className="space-y-3">
-                                    {user_rights.map((right, idx) => (
+                                    {legalRights.length > 0 ? legalRights.map((right, idx) => (
+                                        <li key={idx} className="text-green-800 text-sm">
+                                            <p className="font-semibold">{right.right}</p>
+                                            <p className="mt-1">{right.explanation}</p>
+                                            {right.caseApplication && <p className="mt-1 text-xs text-green-700">{right.caseApplication}</p>}
+                                            <p className="mt-1 text-xs text-green-600">{right.legalBasis || `${right.act}, ${right.section}`} · {right.source}</p>
+                                        </li>
+                                    )) : user_rights.map((right, idx) => (
                                         <li key={idx} className="flex items-start text-green-800 text-sm font-medium">
                                             <span className="mr-2 text-green-500 mt-0.5">•</span>
                                             {right}

@@ -63,24 +63,26 @@
   background-position: center !important;
 }
 
+/* Enhanced Google Translate dropdown for dark theme */
 .goog-te-combo {
-  max-width: min(220px, 52vw);
-  min-height: 36px;
-  margin: 0;
-  padding: 0 34px 0 12px;
-  border: 1px solid #dbe2ea;
+  font-size: 15px;
+  padding: 10px 16px;
   border-radius: 10px;
-  background-color: #f8fafc;
-  color: #334155;
-  font: inherit;
-  cursor: pointer;
+  background-color: #181f2a;
+  border: 1.5px solid #334155;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  color: #f1f5f9;
   outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  transition: border 0.2s, box-shadow 0.2s;
 }
-
-.goog-te-combo:focus,
-#translate-fallback:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgb(99 102 241 / 15%);
+.goog-te-combo:focus, .goog-te-combo:hover {
+  border: 1.5px solid #38bdf8;
+  box-shadow: 0 0 0 2px #38bdf880;
+  background-color: #232b3b;
 }
 
 #translate-fallback {

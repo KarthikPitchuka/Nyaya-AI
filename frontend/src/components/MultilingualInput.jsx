@@ -13,6 +13,7 @@ const MultilingualInput = ({ onAnalyze }) => {
         locationAccuracy,
         isLoadingLocation,
         locationError,
+        locationStatus,
         refreshLocation,
         setIsManualMode
     } = useLocation();
@@ -27,9 +28,24 @@ const MultilingualInput = ({ onAnalyze }) => {
     const fileInputRef = useRef(null);
     const mediaRecorderRef = useRef(null);
     const recordingStreamRef = useRef(null);
+    const speechRecognitionRef = useRef(null);
+    const isSpeechRecognitionRef = useRef(false);
+    const isRecordingRef = useRef(false);
+    const speechBaseTextRef = useRef('');
+    const speechFinalTextRef = useRef('');
+    const speechRetryRef = useRef(0);
     const isMountedRef = useRef(true);
     const audioChunksRef = useRef([]);
     const isLocationApproximate = locationAccuracy !== null && locationAccuracy > 1000;
+    const mapUrl = coords
+        ? (() => {
+            const latitude = coords.latitude;
+            const longitude = coords.longitude;
+            const delta = 0.005;
+            const bbox = `${longitude - delta},${latitude - delta},${longitude + delta},${latitude + delta}`;
+            return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(`${latitude},${longitude}`)}`;
+        })()
+        : '';
 
     useEffect(() => {
         isMountedRef.current = true;
@@ -39,15 +55,103 @@ const MultilingualInput = ({ onAnalyze }) => {
             if (recorder && recorder.state !== 'inactive') {
                 recorder.stop();
             }
+            speechRecognitionRef.current?.abort();
             recordingStreamRef.current?.getTracks().forEach(track => track.stop());
         };
     }, []);
 
     const toggleRecording = async () => {
         if (isRecording) {
+            isRecordingRef.current = false;
+            if (isSpeechRecognitionRef.current && speechRecognitionRef.current) {
+                speechRecognitionRef.current.stop();
+                speechRecognitionRef.current = null;
+                isSpeechRecognitionRef.current = false;
+                setIsRecording(false);
+                return;
+            }
             const recorder = mediaRecorderRef.current;
             if (recorder && recorder.state !== 'inactive') recorder.stop();
             setIsRecording(false);
+            return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+            speechRecognitionRef.current = recognition;
+            isSpeechRecognitionRef.current = true;
+            isRecordingRef.current = true;
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = navigator.language || 'en-IN';
+            recognition.maxAlternatives = 1;
+            speechFinalTextRef.current = '';
+            speechBaseTextRef.current = inputText.trim();
+
+            recognition.onstart = () => {
+                if (!isMountedRef.current) return;
+                setVoiceError('');
+                setIsRecording(true);
+            };
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+                for (let index = event.resultIndex; index < event.results.length; index += 1) {
+                    const transcript = event.results[index][0].transcript;
+                    if (event.results[index].isFinal) speechFinalTextRef.current += transcript;
+                    else interimTranscript += transcript;
+                }
+                if (isMountedRef.current) {
+                    setInputText(`${speechBaseTextRef.current} ${speechFinalTextRef.current} ${interimTranscript ? `[Listening] ${interimTranscript}` : ''}`.trim());
+                }
+            };
+            recognition.onerror = (event) => {
+                if (!isMountedRef.current) return;
+                isRecordingRef.current = false;
+                isSpeechRecognitionRef.current = false;
+                speechRecognitionRef.current = null;
+                setIsRecording(false);
+                const messages = {
+                    'audio-capture': 'No microphone was found. Check the selected microphone and browser permission.',
+                    'network': 'Browser voice recognition needs a network connection. Check your connection and try again.',
+                    'not-allowed': 'Microphone or speech recognition permission was denied. Allow access and try again.',
+                    'service-not-allowed': 'This browser does not allow speech recognition. Try Chrome or type your issue.',
+                    'no-speech': 'No speech was detected. Speak clearly after the microphone starts and try again.'
+                };
+                setVoiceError(messages[event.error] || `Voice recognition failed (${event.error}). Try again or type your issue.`);
+            };
+            recognition.onend = () => {
+                if (!isMountedRef.current) return;
+                const transcript = speechFinalTextRef.current.trim();
+                if (isRecordingRef.current && !transcript && speechRetryRef.current < 1) {
+                    speechRetryRef.current += 1;
+                    try {
+                        recognition.start();
+                        return;
+                    } catch {
+                        // The normal cleanup below reports the failed attempt.
+                    }
+                }
+                isRecordingRef.current = false;
+                isSpeechRecognitionRef.current = false;
+                speechRecognitionRef.current = null;
+                setIsRecording(false);
+                setInputText(prev => prev.replace(/\s*\[Listening\].*$/s, '').trim());
+                if (!transcript) {
+                    setVoiceError('No speech was captured. Check microphone access and try again.');
+                }
+            };
+
+            try {
+                speechRetryRef.current = 0;
+                recognition.start();
+            } catch {
+                isRecordingRef.current = false;
+                isSpeechRecognitionRef.current = false;
+                speechRecognitionRef.current = null;
+                setIsRecording(false);
+                setVoiceError('Could not start voice recognition. Try again or type your issue.');
+            }
             return;
         }
 
@@ -67,6 +171,7 @@ const MultilingualInput = ({ onAnalyze }) => {
                 return;
             }
             const recorder = new MediaRecorder(stream, getAudioRecordingOptions());
+            isRecordingRef.current = true;
             recordingStreamRef.current = stream;
             audioChunksRef.current = [];
             let recordingFailed = false;
@@ -133,7 +238,7 @@ const MultilingualInput = ({ onAnalyze }) => {
             };
 
             mediaRecorderRef.current = recorder;
-            recorder.start();
+            recorder.start(1000);
             setIsRecording(true);
         } catch (error) {
             stream?.getTracks().forEach(track => track.stop());
@@ -221,6 +326,11 @@ const MultilingualInput = ({ onAnalyze }) => {
                                 <Loader2 size={12} className="animate-spin" />
                                 Detecting current device location...
                             </span>
+                        ) : locationStatus === 'address-lookup' ? (
+                            <span className="flex items-center gap-1.5">
+                                <Loader2 size={12} className="animate-spin" />
+                                Looking up the detected address...
+                            </span>
                         ) : (
                             <div className="flex items-center gap-2 overflow-hidden w-full">
                                 <span className="truncate max-w-[70%]">
@@ -265,6 +375,19 @@ const MultilingualInput = ({ onAnalyze }) => {
                         <span className="hidden sm:inline">Refresh</span>
                     </button>
                 </div>
+                {coords && (
+                    <div className="border-b border-gray-100 bg-slate-50 p-2">
+                        <iframe
+                            title="Detected location map"
+                            src={mapUrl}
+                            className="h-36 w-full rounded-lg border border-gray-200"
+                            loading="lazy"
+                        />
+                        <p className="mt-1 text-center text-[10px] text-gray-500">
+                            Verified coordinates: {coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)}
+                        </p>
+                    </div>
+                )}
 
                 <div className="relative">
                     <textarea
@@ -302,7 +425,7 @@ const MultilingualInput = ({ onAnalyze }) => {
                             ref={fileInputRef}
                             onChange={handleFileChange}
                             className="hidden"
-                            accept="image/jpeg,image/png,image/webp,application/pdf,application/msword,text/plain"
+                            accept="image/jpeg,image/png,image/webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv,application/json"
                         />
                         <button
                             type="button"

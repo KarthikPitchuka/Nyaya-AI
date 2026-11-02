@@ -15,8 +15,31 @@ const legalSynonyms = new Map([
     ['seller', ['trader', 'vendor', 'supplier', 'merchant', 'opposite party']],
     ['refusing', ['refuse', 'refused', 'refusal']],
     ['complaint', ['complainant', 'grievance', 'consumer dispute']],
-    ['complaints', ['complainant', 'grievance', 'consumer dispute']]
+    ['complaints', ['complainant', 'grievance', 'consumer dispute']],
+    ['death', ['dead', 'killing', 'murder', 'homicide', 'culpable']],
+    ['dead', ['death', 'killing', 'murder', 'homicide', 'culpable']],
+    ['killed', ['killing', 'murder', 'homicide', 'culpable']],
+    ['murder', ['killing', 'homicide', 'culpable', 'death']],
+    ['homicide', ['murder', 'killing', 'culpable', 'death']]
 ]);
+const legalIntentTerms = [
+    {
+        triggers: ['death', 'dead', 'killed', 'murder', 'homicide', 'manslaughter'],
+        terms: ['death', 'killing', 'murder', 'homicide', 'culpable', 'manslaughter', 'causing death']
+    },
+    {
+        triggers: ['rape', 'sexual', 'molest', 'harass'],
+        terms: ['rape', 'sexual', 'assault', 'molest', 'harassment', 'modesty']
+    },
+    {
+        triggers: ['theft', 'stolen', 'robbery', 'robbed', 'steal'],
+        terms: ['theft', 'stolen', 'robbery', 'robbed', 'dishonestly', 'movable property']
+    },
+    {
+        triggers: ['cheat', 'cheating', 'fraud', 'scam', '欺骗'],
+        terms: ['cheating', 'fraud', 'dishonestly', 'deception', 'misappropriation']
+    }
+];
 const stopWords = new Set([
     'about', 'above', 'after', 'again', 'against', 'all', 'also', 'am', 'an',
     'and', 'any', 'are', 'as', 'at', 'be', 'because', 'been', 'before', 'being',
@@ -45,6 +68,19 @@ const actFamily = (title) => title.toLocaleLowerCase()
     .replace(/\b(?:18|19|20)\d{2}\b/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+const extractIncidentDate = (query) => {
+    const match = String(query || '').match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b|\b(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2})\b/);
+    if (!match) return null;
+    const year = Number(match[1] || match[6]);
+    const month = Number(match[2] || match[4]);
+    const day = Number(match[3] || match[5]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+        ? date
+        : null;
+};
+
+const isIpcOrBns = (title) => /\b(?:indian penal code|bharatiya nyaya sanhita|ipc|bns)\b/i.test(title);
 
 const flattenText = (value) => {
     if (typeof value === 'string' || typeof value === 'number') return String(value);
@@ -162,7 +198,13 @@ export const searchActIndex = (index, query, limit = 8) => {
 
     const queryPhrase = query.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
     const scored = new Map();
+    const primaryMatches = new Map();
+    const termMatches = new Map();
     const totalDocuments = index.documents.length;
+    const normalizedQuery = query.toLocaleLowerCase();
+    const intent = legalIntentTerms.find(({ triggers }) => (
+        triggers.some(trigger => normalizedQuery.includes(trigger))
+    ));
 
     for (const [term, queryWeight] of queryWeights) {
         const frequency = index.documentFrequency.get(term) || 0;
@@ -173,6 +215,10 @@ export const searchActIndex = (index, query, limit = 8) => {
             const documentIndex = termPostings[posting];
             const termFrequency = termPostings[posting + 1];
             const document = index.documents[documentIndex];
+            termMatches.set(documentIndex, (termMatches.get(documentIndex) || 0) + 1);
+            if (queryWeight === 1) {
+                primaryMatches.set(documentIndex, (primaryMatches.get(documentIndex) || 0) + 1);
+            }
             const lengthNorm = index.averageLength
                 ? 0.25 + 0.75 * document.bodyLength / index.averageLength
                 : 1;
@@ -191,18 +237,27 @@ export const searchActIndex = (index, query, limit = 8) => {
         }
     }
 
+    const rankedDocuments = [...scored.entries()].filter(([documentIndex]) => {
+        const document = index.documents[documentIndex];
+        if (!intent) return true;
+
+        const searchableText = `${document.actTitle} ${document.heading} ${document.context} ${document.text}`
+            .toLocaleLowerCase();
+        return intent.terms.some(term => searchableText.includes(term));
+    });
+
     if (queryPhrase) {
-        for (const [documentIndex, score] of scored) {
+        rankedDocuments.forEach(([documentIndex, score], rankedIndex) => {
             const document = index.documents[documentIndex];
             if (`${document.actTitle} ${document.actId} ${document.section} ${document.heading}`
                 .toLocaleLowerCase().includes(queryPhrase)) {
-                scored.set(documentIndex, score + 6);
+                rankedDocuments[rankedIndex] = [documentIndex, score + 6];
             }
-        }
+        });
     }
 
     const explicitlyRequestedYear = query.match(/\b(?:18|19|20)\d{2}\b/)?.[0];
-    const ranked = [...scored.entries()].map(([documentIndex, score]) => {
+    const ranked = rankedDocuments.map(([documentIndex, score]) => {
         const document = index.documents[documentIndex];
         const family = actFamily(document.actTitle);
         const year = actYear(document.actTitle);
@@ -210,12 +265,25 @@ export const searchActIndex = (index, query, limit = 8) => {
         const outdatedVersionWasRequested = explicitlyRequestedYear && Number(explicitlyRequestedYear) === year;
         return {
             documentIndex,
-            score: year && year < latestYear && !outdatedVersionWasRequested ? score * 0.2 : score
+            score: year && year < latestYear && !outdatedVersionWasRequested ? score * 0.2 : score,
+            primaryMatchCount: primaryMatches.get(documentIndex) || 0
         };
     });
 
-    return ranked
+    const sorted = ranked
         .sort((left, right) => right.score - left.score)
+    if (!sorted.length) return [];
+
+    const topScore = sorted[0].score;
+    return sorted
+        .filter(({ documentIndex, score, primaryMatchCount }) => (
+            score >= Math.max(1.25, topScore * 0.35) &&
+            (primaryMatchCount >= 1 || (termMatches.get(documentIndex) || 0) >= 2 || (
+                intent &&
+                intent.terms.some(term => `${index.documents[documentIndex].actTitle} ${index.documents[documentIndex].heading} ${index.documents[documentIndex].text}`
+                    .toLocaleLowerCase().includes(term))
+            ))
+        ))
         .slice(0, limit)
         .map(({ documentIndex, score }) => {
             const { bodyLength, ...document } = index.documents[documentIndex];
@@ -271,5 +339,16 @@ export const getRelevantActSections = async (query, limit = 8) => {
         throw error;
     });
     const index = await indexPromise;
-    return searchActIndex(index, query, limit);
+    const results = searchActIndex(index, query, limit);
+    const incidentDate = extractIncidentDate(query);
+    if (!incidentDate) return results;
+
+    const transitionDate = new Date(Date.UTC(2024, 6, 1));
+    const preferredActPattern = incidentDate < transitionDate
+        ? /indian penal code|ipc/i
+        : /bharatiya nyaya sanhita|bns/i;
+    const hasTransitionActs = results.some(({ actTitle }) => isIpcOrBns(actTitle));
+    return hasTransitionActs
+        ? results.filter(({ actTitle }) => !isIpcOrBns(actTitle) || preferredActPattern.test(actTitle))
+        : results;
 };

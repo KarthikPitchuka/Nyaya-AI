@@ -52,6 +52,12 @@ export const analyzeCase = async (req, res) => {
             targetDepartment: analysis.target_department,
             targetSupervisor: analysis.target_supervisor,
             departmentUrl: analysis.department_url,
+            caseClassification: analysis.caseClassification,
+            applicableLegislation: analysis.applicableLegislation,
+            relevantProvisions: analysis.relevantProvisions || [],
+            legalRights: analysis.legalRights || [],
+            missingInformation: analysis.missingInformation || [],
+            insufficientVerifiedInformation: analysis.insufficientVerifiedInformation || false,
             evidenceUrls: evidenceUrls
         });
 

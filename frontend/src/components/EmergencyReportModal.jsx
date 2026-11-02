@@ -4,6 +4,7 @@ import axios from 'axios';
 import { useLocation } from '../context/LocationContext';
 import { API_BASE_URL } from '../config/api';
 import { getAudioFileExtension, getAudioRecordingOptions } from '../utils/audioRecording';
+import { getFreshFirebaseIdToken } from '../config/firebase';
 
 const EmergencyReportModal = ({ isOpen, onClose, userPhone }) => {
     const { locationStr, coords, locationAccuracy } = useLocation();
@@ -137,7 +138,7 @@ const EmergencyReportModal = ({ isOpen, onClose, userPhone }) => {
 
             // Get user's current location from context or storage
             const userLoc = locationStr || '';
-            const firebaseToken = localStorage.getItem('nyaya_auth_token');
+            const firebaseToken = await getFreshFirebaseIdToken();
             if (!firebaseToken || firebaseToken.startsWith('dev_mock_token_')) {
                 throw new Error('Please sign in with Firebase phone authentication before submitting an emergency report.');
             }

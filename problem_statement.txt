@@ -26,14 +26,16 @@ emergency tracking, and cost-free authentication.
 - Frontend: React.js (built with Vite), Tailwind CSS for styles, and Lucide React icons.
 - Backend: Node.js, Express.js web framework.
 - Database: MongoDB (with Mongoose ORM).
-- AI Engine: Google Gemini API (model 'gemini-2.0-flash' via @google/genai SDK) 
-  for text translation, audio transcription, and Indian legal case analysis.
+- AI Engine: Google Gemini API (via @google/genai SDK) for multilingual text
+  translation, audio transcription, and Indian legal case analysis, with an
+  optional Ollama local text-analysis provider for privacy/offline development.
 - Authentication: 
   - Firebase Phone Auth Emulator (cost-free, local phone auth testing).
   - Time-based One-Time Password (TOTP) utilizing speakeasy and qrcode.
 - Text-To-Speech: node-edge-tts (high-quality Microsoft Edge Neural Voices).
-- Geolocation: Google Geolocation API, IP-API, IPAPI.co, IPWhois.app, and 
-  OpenStreetMap (Nominatim) for reverse-geocoding.
+- Geolocation: explicit HTML5 high-accuracy browser geolocation, backend-proxied
+  OpenStreetMap (Nominatim) reverse-geocoding, and an OpenStreetMap coordinate
+  marker. The user-facing flow never substitutes an approximate IP location.
 
 
 3. KEY FUNCTIONALITIES

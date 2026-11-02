@@ -17,7 +17,12 @@ const fileFilter = (req, file, cb) => {
     // Accept standard evidence files and ANY audio recordings
     const allowedImageDocTypes = [
         'image/jpeg', 'image/png', 'image/webp',
-        'application/pdf', 'application/msword'
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'text/plain',
+        'text/csv',
+        'application/json'
     ];
 
     if (allowedImageDocTypes.includes(file.mimetype) ||

@@ -45,5 +45,14 @@ export const saveLocationToFirebase = async (latitude, longitude, locationStr, d
     }
 };
 
+export const getFreshFirebaseIdToken = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return null;
+
+    const token = await currentUser.getIdToken(true);
+    localStorage.setItem('nyaya_auth_token', token);
+    return token;
+};
+
 export { db, auth, addDoc, collection };
 export default app;

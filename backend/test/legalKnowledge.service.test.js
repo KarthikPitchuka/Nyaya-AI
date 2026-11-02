@@ -85,6 +85,40 @@ test('returns no legal citations when the query has no matching terms', () => {
     assert.deepEqual(searchActIndex(index, 'zzzzxxyy qqqvvv', 5), []);
 });
 
+test('filters unrelated Acts from a death inquiry', () => {
+    const deathIndex = buildActIndex([
+        {
+            fileName: 'bns.json',
+            act: {
+                'Act Title': 'Bharatiya Nyaya Sanhita, 2023',
+                Sections: {
+                    'Section 103.': {
+                        heading: 'Punishment for murder',
+                        paragraphs: { 0: 'Whoever commits murder shall be punished.' }
+                    }
+                }
+            }
+        },
+        {
+            fileName: 'wildlife.json',
+            act: {
+                'Act Title': 'Wild Life (Protection) Act, 1972',
+                Sections: {
+                    'Section 10.': {
+                        heading: 'Protection of wild animals',
+                        paragraphs: { 0: 'Hunting of wild animals is prohibited.' }
+                    }
+                }
+            }
+        }
+    ]);
+
+    const results = searchActIndex(deathIndex, 'inquiry into the death of Ramesh', 8);
+
+    assert.equal(results.length, 1);
+    assert.equal(results[0].actTitle, 'Bharatiya Nyaya Sanhita, 2023');
+});
+
 test('extracts sections from both top-level and chapter-organized Acts', () => {
     assert.equal(index.documents.length, 5);
 });

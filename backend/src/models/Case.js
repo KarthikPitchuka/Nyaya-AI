@@ -22,6 +22,12 @@ const CaseSchema = new mongoose.Schema({
     targetDepartment: { type: String },
     targetSupervisor: { type: String },
     departmentUrl: { type: String },
+    caseClassification: { type: mongoose.Schema.Types.Mixed },
+    applicableLegislation: { type: mongoose.Schema.Types.Mixed },
+    relevantProvisions: [{ type: mongoose.Schema.Types.Mixed }],
+    legalRights: [{ type: mongoose.Schema.Types.Mixed }],
+    missingInformation: [{ type: String }],
+    insufficientVerifiedInformation: { type: Boolean, default: false },
     evidenceUrls: [{ type: String }],
     createdAt: { type: Date, default: Date.now }
 });

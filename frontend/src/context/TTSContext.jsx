@@ -164,6 +164,11 @@ export const TTSProvider = ({ children }) => {
         currentIdRef.current = id;
         setPlaybackState('loading', id);
 
+        if ('speechSynthesis' in window) {
+            playBrowserTTS(text, id);
+            return;
+        }
+
         try {
             const response = await axios.post(
                 `${API_BASE_URL}/api/tts`,

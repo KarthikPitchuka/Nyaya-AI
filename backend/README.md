@@ -10,6 +10,8 @@ Set `CENTRAL_ACTS_DIR` to the directory containing the Central Acts JSON files. 
 
 Set `GEMINI_API_KEY` or `GEMINI_API_KEYS` to a Gemini API key from Google AI Studio. Do not use a Google OAuth access token, Firebase key, service-account credential, or other Google credential in these variables. The default model and automatic fallback are `gemini-2.5-flash`; if a configured model returns a high-demand/unavailable response, the API retries once with the fallback. Set `GEMINI_MODEL` and `GEMINI_FALLBACK_MODEL` only to models enabled for your key/project. Invalid credentials and unavailable models are reported separately from rate limits.
 
+An optional local text-analysis provider is available through Ollama. Install and start Ollama, pull a compatible model, then set `OLLAMA_ENABLED=true`, `OLLAMA_URL`, and `OLLAMA_MODEL`. Ollama is used for text-only analysis; requests with evidence files continue through Gemini. The local Central Acts passages are still supplied to the model, and the API only exposes BNS/IPC matches that were retrieved from those passages.
+
 For the supplied local collection, set:
 
 ```dotenv
@@ -18,7 +20,7 @@ CENTRAL_ACTS_DIR=/home/karthik/Downloads/annotatedCentralActs
 
 The dataset is not copied into or committed with this repository. The collection may not reflect the latest amendments, repeals, or commencement notifications; matching passages are evidence for review, not confirmation that a provision currently applies. Confirm important advice against current official sources or with a qualified lawyer.
 
-The separate `GOOGLE_GEOLOCATION_API_KEY` setting is for Google's Geolocation API. It must not be populated with a Gemini key.
+Reverse geocoding is handled by the backend at `POST /api/geolocation/reverse` using OpenStreetMap Nominatim. The browser supplies validated GPS coordinates; the backend never substitutes IP coordinates for the user's location.
 
 ## Authentication and report access
 
